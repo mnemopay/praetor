@@ -31,8 +31,10 @@ packages/core      charter schema + runtime + auditor
 packages/cli       `praetor` binary
 packages/payments  MnemoPay HITL wrapper
 packages/agents    OpenClaw + Hermes adapters
-packages/design    Spline / Godly / Claude Design / AntiGravity bindings
+packages/design    Spline / Godly / Claude Design / AntiGravity / Hypeframes /
+                   Remotion + declarative-UI primitive
 packages/seo       programmatic GEO/SEO page generation
+packages/ugc       portrait → motion → voiceover → composite ad pipeline
 charters/          example missions
 docs/              architecture, roadmap, compliance notes
 ```

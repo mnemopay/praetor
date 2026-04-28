@@ -18,7 +18,8 @@
     { "path": "packages/payments" },
     { "path": "packages/agents" },
     { "path": "packages/design" },
-    { "path": "packages/seo" }
+    { "path": "packages/seo" },
+    { "path": "packages/ugc" }
   ],
   "files": []
 }

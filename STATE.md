@@ -99,6 +99,9 @@ Translated to a buildable scope:
 - **Fiscal layer**: MnemoPay v1.4.2 — Agent FICO, Merkle integrity, Stripe/Paystack
   rails, HITL approval. The CFO role from the Sovereign-OS pattern, but real and
   with 862 passing tests.
+- **UGC pipeline**: declarative ad generation (portrait → motion → voiceover →
+  composite) with paid + zero-cost backends so missions keep running when API
+  credits are exhausted. Wraps the user's existing `ugc-pipeline/` work.
 - **Compliance**: EU AI Act Article 12 (Aug 2 2026 enforcement) audit-log generation.
 
 ## Build order
