@@ -119,3 +119,35 @@ Translated to a buildable scope:
 7. Compliance pack — Article 12 log bundle generator.
 
 Targets and weeks-of-work estimates live in `docs/ROADMAP.md` (created on first commit).
+
+## Addendum 2026-04-28b — repositioning
+
+Per the user's directive later on 2026-04-28:
+
+> "praetor is not opencla or hermes or claude, its better than those."
+
+Earlier copy in this file and in the original README framed Praetor as a wrapper
+of OpenClaw + Hermes + Claude Code + Claude Design + MnemoPay. That framing is
+retired. Praetor is its own runtime. It MAY consume those projects through the
+agent pack, but it is not them. It owns its own charter schema, its own fiscal
+gate, its own Merkle audit chain, its own design / video / scrape / knowledge /
+business-ops surfaces, and its own GEO/SEO emission. The README has been
+rewritten to reflect this; this STATE.md addendum exists so the change is
+traceable in the truth-record rather than buried in a force-rewrite.
+
+The build order in §"Build order" above still holds, with these additions
+landing on day one:
+
+8. Scrape pack (`packages/scrape`) — native HTML / sitemap / JSON-LD scraping
+   with a Crawl4AI-style fetch, Playwright fallback, and X.com auth-cookie
+   path. Firecrawl is the paid tier, never the default.
+9. Knowledge pack (`packages/knowledge`) — vector knowledge base with an
+   in-memory backend for tests and a MnemoPay-recall backend for production.
+10. Business-ops pack (`packages/business-ops`) — outbound email, billing,
+    scheduling, invoice / quote, CRM. Mock + live adapter per surface so a
+    charter can run a real business or run a dry-run end to end.
+11. SEO pack expansion — from 8 surfaces to 15+: hreflang, BreadcrumbList,
+    FAQPage, Article, Organization, WebSite, SoftwareApplication, plus
+    opensearch.xml, RSS / Atom, security.txt, humans.txt.
+12. Real Remotion + Hypeframes emitters in `packages/design` (replacing the
+    day-zero `Error("not yet implemented")` stubs).

@@ -19,7 +19,10 @@
     { "path": "packages/agents" },
     { "path": "packages/design" },
     { "path": "packages/seo" },
-    { "path": "packages/ugc" }
+    { "path": "packages/ugc" },
+    { "path": "packages/scrape" },
+    { "path": "packages/knowledge" },
+    { "path": "packages/business-ops" }
   ],
   "files": []
 }

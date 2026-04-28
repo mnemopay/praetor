@@ -2,7 +2,7 @@
   "name": "praetor",
   "version": "0.0.1",
   "private": true,
-  "description": "Mission runtime for autonomous agents. OpenClaw + Hermes + Claude Code + Claude Design + MnemoPay. Design and GEO/SEO native, EU AI Act ready.",
+  "description": "Praetor — the mission runtime for autonomous agents. Charter-driven, fiscally gated, audit-logged by default. Native design, video, scraping, knowledge, GEO/SEO, EU AI Act.",
   "type": "module",
   "workspaces": [
     "packages/*"
