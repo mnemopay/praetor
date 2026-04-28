@@ -2,13 +2,16 @@ import { describe, it, expect, vi } from "vitest";
 import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { writeFileSync } from "node:fs";
 import {
   MockUgcRenderer,
   specFromGoal,
   DEFAULT_BACKENDS,
   priceOf,
+  hedraPrompt,
   OpenAIImageAdapter,
   LumaMotionAdapter,
+  HedraMotionAdapter,
   AzureNeuralVoiceAdapter,
   ProductionUgcRenderer,
   type Compositor,
@@ -50,6 +53,30 @@ describe("Praetor UGC pipeline", () => {
   it("luma-ray2 motion price is wired", () => {
     expect(priceOf({ portrait: "openai-image", motion: "luma-ray2", voice: "azure-neural" })).toBeCloseTo(0.44, 5);
     expect(priceOf({ portrait: "reuse", motion: "luma-ray-flash", voice: "azure-neural" })).toBeCloseTo(0.18, 5);
+  });
+
+  it("hedra-character-3 motion price is wired (~50% of seedance)", () => {
+    expect(priceOf({ portrait: "openai-image", motion: "hedra-character-3", voice: "azure-neural" })).toBeCloseTo(0.24, 5);
+  });
+
+  it("hedraPrompt joins camera+subject+background", () => {
+    const p = hedraPrompt({
+      camera: "Slow dolly-in",
+      subject: "founder speaking confidently to camera",
+      background: "warm office at golden hour",
+    });
+    expect(p).toBe("Slow dolly-in. founder speaking confidently to camera. warm office at golden hour.");
+    expect(p.split(/\s+/).length).toBeLessThanOrEqual(25);
+  });
+
+  it("hedraPrompt clips to 25 words", () => {
+    const p = hedraPrompt({
+      camera: "Slow handheld dolly-in tracking from waist to face level",
+      subject: "founder speaking with calm conviction directly to the camera lens with subtle micro-expressions",
+      background: "warm minimal office at golden hour with soft window light and bokeh plants",
+    });
+    expect(p.split(/\s+/).length).toBeLessThanOrEqual(25);
+    expect(p.endsWith(".")).toBe(true);
   });
 
   it("voice clone path requires a reference audio source", async () => {
@@ -176,6 +203,84 @@ describe("AzureNeuralVoiceAdapter", () => {
   });
 });
 
+describe("HedraMotionAdapter", () => {
+  it("uploads image+audio assets, kicks a generation, polls, and writes the mp4", async () => {
+    const out = mkdtempSync(join(tmpdir(), "praetor-hedra-"));
+    const portraitPath = join(out, "portrait.png");
+    const audioPath = join(out, "voice.mp3");
+    writeFileSync(portraitPath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    writeFileSync(audioPath, Buffer.from("ID3audio"));
+    const fakeMp4 = Buffer.from("hedra-final-mp4");
+    let assetCalls = 0;
+    let uploadCalls = 0;
+    let polls = 0;
+    const seenAssetIds: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith("/web-app/public/v1/assets") && init?.method === "POST") {
+        assetCalls++;
+        const body = JSON.parse(String(init.body)) as { type: string };
+        const id = body.type === "image" ? "img-1" : "aud-1";
+        seenAssetIds.push(id);
+        return new Response(JSON.stringify({ id }), { status: 200 });
+      }
+      if (u.includes("/assets/") && u.endsWith("/upload") && init?.method === "POST") {
+        uploadCalls++;
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      if (u.endsWith("/web-app/public/v1/generations") && init?.method === "POST") {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        expect(body.start_keyframe_id).toBe("img-1");
+        expect(body.audio_id).toBe("aud-1");
+        expect(body.ai_model_id).toBe("character-3");
+        expect(body.aspect_ratio).toBe("9:16");
+        return new Response(JSON.stringify({ project_id: "proj-1" }), { status: 200 });
+      }
+      if (u.endsWith("/projects/proj-1")) {
+        polls++;
+        if (polls < 2) return new Response(JSON.stringify({ status: "in_progress" }), { status: 200 });
+        return new Response(
+          JSON.stringify({ status: "complete", video_url: "https://hedra.test/v.mp4" }),
+          { status: 200 },
+        );
+      }
+      if (u === "https://hedra.test/v.mp4") {
+        return new Response(fakeMp4, { status: 200 });
+      }
+      throw new Error("unexpected url " + u);
+    });
+    const a = new HedraMotionAdapter({
+      apiKey: "hk-test",
+      outDir: out,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      pollIntervalMs: 1,
+    });
+    const r = await a.generate({
+      prompt: "person speaking",
+      portraitPath,
+      audioPath,
+      durationSeconds: 8,
+      width: 1080,
+      height: 1920,
+    });
+    expect(assetCalls).toBe(2);
+    expect(uploadCalls).toBe(2);
+    expect(polls).toBeGreaterThanOrEqual(2);
+    expect(statSync(r.videoPath).size).toBeGreaterThan(0);
+  });
+  it("requires audioPath — voice must run before motion", async () => {
+    const out = mkdtempSync(join(tmpdir(), "praetor-hedra-noaudio-"));
+    const a = new HedraMotionAdapter({
+      apiKey: "hk-test",
+      outDir: out,
+      fetchImpl: (() => { throw new Error("should not be called"); }) as unknown as typeof fetch,
+    });
+    await expect(
+      a.generate({ prompt: "p", portraitPath: "/tmp/p.png", durationSeconds: 8, width: 1080, height: 1920 }),
+    ).rejects.toThrow(/audioPath/);
+  });
+});
+
 describe("ProductionUgcRenderer", () => {
   it("end-to-end with mocked adapters dispatches all four stages and prices correctly", async () => {
     const calls: string[] = [];
@@ -218,6 +323,46 @@ describe("ProductionUgcRenderer", () => {
     });
     expect(calls).toEqual(["portrait", "motion", "voice", "compose"]);
     expect(result.costUsd).toBeCloseTo(0.44, 5);
+  });
+  it("hedra (bakesAudio) flow runs voice before motion and skips compositor", async () => {
+    const calls: string[] = [];
+    const portraitAdapter: PortraitAdapter = {
+      backend: "openai-image",
+      generate: async () => { calls.push("portrait"); return { imagePath: join(tmpdir(), "p.png") }; },
+    };
+    const motionAdapter: MotionAdapter = {
+      backend: "hedra-character-3",
+      bakesAudio: true,
+      generate: async (a) => {
+        calls.push("motion");
+        expect(a.audioPath).toBe(join(tmpdir(), "v.mp3"));
+        const videoPath = join(tmpdir(), `hedra-out-${Date.now()}.mp4`);
+        writeFileSync(videoPath, Buffer.from("hedra-mp4"));
+        return { videoPath };
+      },
+    };
+    const voiceAdapter: VoiceAdapter = {
+      backend: "azure-neural",
+      synthesize: async () => { calls.push("voice"); return { audioPath: join(tmpdir(), "v.mp3") }; },
+    };
+    const compositor: Compositor = {
+      compose: async () => { calls.push("compose"); throw new Error("compose must not run for hedra"); },
+    };
+    const r = new ProductionUgcRenderer({
+      portrait: { "openai-image": portraitAdapter },
+      motion: { "hedra-character-3": motionAdapter },
+      voice: { "azure-neural": voiceAdapter },
+      compositor,
+      outDir: tmpdir(),
+    });
+    const result = await r.render(specFromGoal({ id: `hedra-${Date.now()}`, goal: "lipsync demo" }), {
+      portrait: "openai-image",
+      motion: "hedra-character-3",
+      voice: "azure-neural",
+    });
+    expect(calls).toEqual(["portrait", "voice", "motion"]);
+    expect(result.backends.motion).toBe("hedra-character-3");
+    expect(result.costUsd).toBeCloseTo(0.24, 5);
   });
   it("rejects motion backends needing a portrait URL when no uploader is supplied", async () => {
     const r = new ProductionUgcRenderer({

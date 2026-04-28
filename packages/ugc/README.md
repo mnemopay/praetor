@@ -16,6 +16,7 @@ npm install @praetor/ugc
 | Motion | `luma-ray2` | ~$0.40 / 5s | `LUMA_API_KEY` |
 | Motion | `luma-ray-flash` | ~$0.18 / 5s | `LUMA_API_KEY` |
 | Motion | `seedance` (Replicate) | ~$0.50 / 5s | `REPLICATE_API_TOKEN` |
+| Motion | `hedra-character-3` (lipsync, bakes VO) | ~$0.20 / 8s | `HEDRA_API_KEY` |
 | Motion | `kenburns` (ffmpeg) | $0 | — |
 | Voice | `azure-neural` | $0 (F0 free 500K char/mo) | `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION` |
 | Voice | `elevenlabs` | from $22/mo | `ELEVENLABS_API_KEY` |
@@ -58,6 +59,21 @@ audio path on the spec. Calling `render` without it throws.
 await r.render(spec, {
   voice: "xtts-v2-clone",
   voiceClone: { referencePath: "/abs/path/to/me.wav" },
+});
+```
+
+## Lipsync (Hedra Character-3)
+
+Hedra is the talking-head specialist — phoneme-locked lipsync, ~50% the cost of
+Seedance for that shape. The renderer detects `bakesAudio` motion adapters and
+runs the voice stage **before** motion, then skips the compositor (the Hedra
+clip is already muxed with the VO).
+
+```ts
+const result = await renderer.render(spec, {
+  portrait: "openai-image",
+  motion: "hedra-character-3",
+  voice: "azure-neural",
 });
 ```
 

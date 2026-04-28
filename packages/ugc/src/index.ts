@@ -8,9 +8,9 @@
  * charter can keep running when API credits are exhausted.
  */
 import { spawn } from "node:child_process";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm, readFile, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 export interface UgcSpec {
   id: string;
@@ -36,6 +36,7 @@ export type MotionBackend =
   | "kling"
   | "luma-ray2"
   | "luma-ray-flash"
+  | "hedra-character-3"
   | "kenburns";
 export type VoiceBackend =
   | "azure-neural"
@@ -91,6 +92,18 @@ export function specFromGoal(args: {
   };
 }
 
+/**
+ * Hedra "Omnia" prompt formula: Camera motion + Subject action + Background,
+ * capped at ~25 words. The Character-3 model is the strongest in the field
+ * when prompts stay this tight; longer prompts dilute the lipsync conditioning.
+ */
+export function hedraPrompt(parts: { camera: string; subject: string; background: string }): string {
+  const sentence = `${parts.camera}. ${parts.subject}. ${parts.background}.`;
+  const words = sentence.split(/\s+/);
+  if (words.length <= 25) return sentence;
+  return words.slice(0, 25).join(" ").replace(/[.,;:!?-]+$/, "") + ".";
+}
+
 /* ---------- Mock renderer (used by tests) ------------------------------- */
 
 export class MockUgcRenderer implements UgcRenderer {
@@ -126,6 +139,7 @@ export function priceOf(b: UgcBackends): number {
     : b.motion === "kling" ? 0.3
     : b.motion === "luma-ray2" ? 0.4
     : b.motion === "luma-ray-flash" ? 0.18
+    : b.motion === "hedra-character-3" ? 0.20
     : 0;
   const voice = b.voice === "elevenlabs" ? 0.05 : 0;
   return portrait + motion + voice;
@@ -140,7 +154,18 @@ export interface PortraitAdapter {
 
 export interface MotionAdapter {
   backend: MotionBackend;
-  generate: (args: { prompt: string; portraitPath?: string; portraitUrl?: string; durationSeconds: number; width: number; height: number }) => Promise<{ videoPath: string }>;
+  generate: (args: {
+    prompt: string;
+    portraitPath?: string;
+    portraitUrl?: string;
+    /** Set when the motion adapter bakes lipsync audio into the output (e.g. Hedra Character-3). */
+    audioPath?: string;
+    durationSeconds: number;
+    width: number;
+    height: number;
+  }) => Promise<{ videoPath: string }>;
+  /** True when the adapter produces a video with the VO already muxed in — renderer skips the compositor. */
+  bakesAudio?: boolean;
 }
 
 export interface VoiceAdapter {
@@ -284,6 +309,138 @@ function aspectFromSize(w: number, h: number): "16:9" | "9:16" | "1:1" | "4:3" |
   if (Math.abs(r - 3 / 4) < 0.05) return "3:4";
   if (Math.abs(r - 4 / 3) < 0.05) return "4:3";
   return r > 1 ? "16:9" : "9:16";
+}
+
+/* ---------- Hedra Character-3 motion adapter ---------------------------- */
+
+/**
+ * Hedra Character-3 — omnimodal lipsync. Phoneme-locked talking-head video
+ * driven by a portrait image plus a VO audio track. ~50% of Seedance cost
+ * for the talking-head shape. The renderer must run voice before motion and
+ * pass the resulting `audioPath` into `generate()`. Output is already muxed
+ * with the VO; the compositor stage is skipped.
+ *
+ * API surface (Hedra "Omnia" public v1):
+ *   POST /web-app/public/v1/assets                         -> { id }   (image)
+ *   POST /web-app/public/v1/assets/{id}/upload (multipart) -> upload bytes
+ *   POST /web-app/public/v1/assets                         -> { id }   (audio)
+ *   POST /web-app/public/v1/assets/{id}/upload (multipart) -> upload bytes
+ *   POST /web-app/public/v1/generations                    -> { project_id }
+ *   GET  /web-app/public/v1/projects/{project_id}          -> { status, video_url }
+ */
+export class HedraMotionAdapter implements MotionAdapter {
+  backend: MotionBackend = "hedra-character-3";
+  bakesAudio = true;
+  constructor(
+    private readonly opts: {
+      apiKey: string;
+      modelId?: string;
+      outDir: string;
+      baseUrl?: string;
+      fetchImpl?: typeof fetch;
+      pollIntervalMs?: number;
+      maxPollMs?: number;
+    },
+  ) {}
+  async generate(args: {
+    prompt: string;
+    portraitPath?: string;
+    portraitUrl?: string;
+    audioPath?: string;
+    durationSeconds: number;
+    width: number;
+    height: number;
+  }) {
+    if (!args.portraitPath) {
+      throw new Error("HedraMotionAdapter: portraitPath is required (Hedra uploads the image directly)");
+    }
+    if (!args.audioPath) {
+      throw new Error("HedraMotionAdapter: audioPath is required — run the voice stage before motion");
+    }
+    const f = this.opts.fetchImpl ?? globalThis.fetch;
+    const base = this.opts.baseUrl ?? "https://api.hedra.com";
+    const headers = { "x-api-key": this.opts.apiKey };
+
+    const imageId = await this.createAndUpload(f, base, headers, args.portraitPath, "image");
+    const audioId = await this.createAndUpload(f, base, headers, args.audioPath, "audio");
+
+    const genRes = await f(`${base}/web-app/public/v1/generations`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        type: "video",
+        ai_model_id: this.opts.modelId ?? "character-3",
+        start_keyframe_id: imageId,
+        audio_id: audioId,
+        text_prompt: args.prompt,
+        aspect_ratio: aspectFromSize(args.width, args.height),
+        resolution: "720p",
+        duration_ms: Math.round(args.durationSeconds * 1000),
+      }),
+    });
+    if (!genRes.ok) throw new Error(`HedraMotionAdapter: generations ${genRes.status} ${await genRes.text()}`);
+    const created = (await genRes.json()) as { id?: string; project_id?: string };
+    const projectId = created.project_id ?? created.id;
+    if (!projectId) throw new Error("HedraMotionAdapter: missing project_id in generations response");
+
+    const videoUrl = await this.poll(projectId, base, headers, f);
+    await mkdir(this.opts.outDir, { recursive: true });
+    const videoPath = join(this.opts.outDir, "motion.mp4");
+    const dl = await f(videoUrl);
+    await writeFile(videoPath, Buffer.from(await dl.arrayBuffer()));
+    return { videoPath };
+  }
+  private async createAndUpload(
+    f: typeof fetch,
+    base: string,
+    headers: Record<string, string>,
+    path: string,
+    type: "image" | "audio",
+  ): Promise<string> {
+    const create = await f(`${base}/web-app/public/v1/assets`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ type, name: basename(path) }),
+    });
+    if (!create.ok) throw new Error(`HedraMotionAdapter: assets ${type} ${create.status} ${await create.text()}`);
+    const asset = (await create.json()) as { id?: string };
+    if (!asset.id) throw new Error(`HedraMotionAdapter: missing asset id for ${type}`);
+    const buf = await readFile(path);
+    const form = new FormData();
+    const mime = type === "image" ? "image/png" : "audio/mpeg";
+    form.append("file", new Blob([buf], { type: mime }), basename(path));
+    const up = await f(`${base}/web-app/public/v1/assets/${asset.id}/upload`, {
+      method: "POST",
+      headers,
+      body: form,
+    });
+    if (!up.ok) throw new Error(`HedraMotionAdapter: upload ${type} ${up.status} ${await up.text()}`);
+    return asset.id;
+  }
+  private async poll(
+    projectId: string,
+    base: string,
+    headers: Record<string, string>,
+    f: typeof fetch,
+  ): Promise<string> {
+    const interval = this.opts.pollIntervalMs ?? 4_000;
+    const max = this.opts.maxPollMs ?? 8 * 60_000;
+    const t0 = Date.now();
+    while (Date.now() - t0 < max) {
+      const r = await f(`${base}/web-app/public/v1/projects/${projectId}`, { headers });
+      const j = (await r.json()) as { status?: string; video_url?: string; error_message?: string };
+      const s = (j.status ?? "").toLowerCase();
+      if (s === "complete" || s === "completed" || s === "succeeded") {
+        if (!j.video_url) throw new Error("HedraMotionAdapter: completed but no video_url");
+        return j.video_url;
+      }
+      if (s === "failed" || s === "error") {
+        throw new Error(`HedraMotionAdapter: failed — ${j.error_message ?? "unknown"}`);
+      }
+      await new Promise((res) => setTimeout(res, interval));
+    }
+    throw new Error("HedraMotionAdapter: poll timeout");
+  }
 }
 
 /* ---------- Replicate adapter (Nano Banana / Seedance) ------------------ */
@@ -518,21 +675,38 @@ export class ProductionUgcRenderer implements UgcRenderer {
 
     const motionAdapter = this.adapters.motion[backends.motion];
     if (!motionAdapter) throw new Error(`ProductionUgcRenderer: no adapter for motion backend "${backends.motion}"`);
-    const motion = await motionAdapter.generate({
-      prompt: spec.motionPrompt,
-      portraitPath,
-      portraitUrl,
-      durationSeconds: spec.durationSeconds,
-      width,
-      height,
-    });
-
     const voiceAdapter = this.adapters.voice[backends.voice];
     if (!voiceAdapter) throw new Error(`ProductionUgcRenderer: no adapter for voice backend "${backends.voice}"`);
-    const voice = await voiceAdapter.synthesize({ script: spec.script, voice: spec.voice, rate: spec.rate });
 
     const outputPath = join(outDir, `${spec.id}.mp4`);
-    await this.adapters.compositor.compose({ videoPath: motion.videoPath, audioPath: voice.audioPath, outputPath });
+
+    // Lipsync motion backends (Hedra) need the VO audio to drive the video,
+    // and emit a clip that already has the audio muxed in — voice runs first
+    // and the compositor stage is skipped.
+    if (motionAdapter.bakesAudio) {
+      const voice = await voiceAdapter.synthesize({ script: spec.script, voice: spec.voice, rate: spec.rate });
+      const motion = await motionAdapter.generate({
+        prompt: spec.motionPrompt,
+        portraitPath,
+        portraitUrl,
+        audioPath: voice.audioPath,
+        durationSeconds: spec.durationSeconds,
+        width,
+        height,
+      });
+      await copyFile(motion.videoPath, outputPath);
+    } else {
+      const motion = await motionAdapter.generate({
+        prompt: spec.motionPrompt,
+        portraitPath,
+        portraitUrl,
+        durationSeconds: spec.durationSeconds,
+        width,
+        height,
+      });
+      const voice = await voiceAdapter.synthesize({ script: spec.script, voice: spec.voice, rate: spec.rate });
+      await this.adapters.compositor.compose({ videoPath: motion.videoPath, audioPath: voice.audioPath, outputPath });
+    }
 
     if (!this.adapters.workDir) {
       await rm(workDir, { recursive: true, force: true }).catch(() => {});
@@ -592,6 +766,12 @@ export function defaultRenderer(opts: {
     motion["luma-ray-flash"] = new LumaMotionAdapter({
       apiKey: env.LUMA_API_KEY,
       model: "ray-flash-2",
+      outDir: opts.outDir ?? "out",
+    });
+  }
+  if (env.HEDRA_API_KEY) {
+    motion["hedra-character-3"] = new HedraMotionAdapter({
+      apiKey: env.HEDRA_API_KEY,
       outDir: opts.outDir ?? "out",
     });
   }
