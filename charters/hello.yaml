@@ -1,0 +1,11 @@
+name: hello
+goal: print a hello world result through the praetor runtime
+budget:
+  maxUsd: 1
+  approvalThresholdUsd: 5
+agents:
+  - role: developer
+outputs:
+  - hello.txt
+compliance:
+  article12: false

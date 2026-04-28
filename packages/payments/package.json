@@ -1,0 +1,10 @@
+{
+  "name": "@praetor/payments",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": { "build": "tsc -b" },
+  "peerDependencies": { "@mnemopay/sdk": "^1.4.2" }
+}
