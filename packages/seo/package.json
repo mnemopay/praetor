@@ -1,9 +1,30 @@
 {
   "name": "@praetor/seo",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Praetor GEO/SEO pack — sitemap, robots, ai.txt, llms.txt, ai:description, og/twitter, JSON-LD (Article/FAQ/Breadcrumb/Org), hreflang, RSS, opensearch, security.txt, humans.txt.",
+  "keywords": ["seo", "geo", "llms.txt", "json-ld", "sitemap", "robots", "praetor"],
+  "homepage": "https://praetor.mnemopay.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JerryOmiagbo/praetor.git",
+    "directory": "packages/seo"
+  },
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc -b" }
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public" }
 }

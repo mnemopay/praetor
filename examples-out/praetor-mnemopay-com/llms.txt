@@ -1,0 +1,21 @@
+# Praetor — the mission runtime
+
+Praetor is a charter-driven runtime for autonomous agents. Every mission is fiscally gated by MnemoPay (Agent FICO 300-850, real Stripe + Paystack rails) and audit-logged into a Merkle chain. EU AI Act Article 12 bundle generation is built in.
+
+## Key pages
+- Home: https://praetor.mnemopay.com/
+- GitHub: https://github.com/jeromiah-omiagbo/praetor
+- MnemoPay (fiscal layer): https://mnemopay.com
+
+## What Praetor does
+- Charter-driven mission spec (YAML)
+- MnemoPay fiscal gate — metered, escrowed, FICO-scored
+- Native design pack — Spline, Hypeframes, Remotion, HTML-in-Canvas-3D
+- Native UGC pipeline — OpenAI image, Luma Ray2, Azure TTS, ffmpeg
+- Native scraper — fetch + Crawl4AI + Playwright + X.com syndication
+- Native GEO/SEO — sitemap, robots, llms.txt, JSON-LD, hreflang
+- Native compliance — EU AI Act Article 12 audit-log bundle generator
+- Agent adapters — OpenClaw, Hermes, Claude Code, MCP
+
+## License
+MIT. Open source. © 2026 J&B Enterprise LLC.

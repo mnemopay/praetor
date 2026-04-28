@@ -5,6 +5,10 @@
   "references": [
     { "path": "../core" },
     { "path": "../payments" },
-    { "path": "../agents" }
+    { "path": "../agents" },
+    { "path": "../scrape" },
+    { "path": "../knowledge" },
+    { "path": "../router" },
+    { "path": "../business-ops" }
   ]
 }
