@@ -38,8 +38,8 @@ export interface GameAssetSpec {
   sfxNames?: string[];
 }
 
-export type ConceptBackend = "openai-image" | "fal-flux" | "reuse";
-export type SpriteBackend = "nano-banana-bg-removed" | "openai-image" | "aseprite-template" | "reuse";
+export type ConceptBackend = "openai-image" | "fal-flux" | "pollinations" | "reuse";
+export type SpriteBackend = "nano-banana-bg-removed" | "openai-image" | "pollinations" | "aseprite-template" | "reuse";
 export type TextureBackend = "fal-flux-tileable" | "noise-procedural" | "reuse";
 export type MusicBackend = "suno-api" | "elevenlabs-music" | "royalty-free-pack" | "silent";
 export type SfxBackend = "elevenlabs-sfx" | "sfxr-presets" | "silent";
@@ -228,6 +228,52 @@ class StaticTemplateCode implements CodeAdapter {
   backend: CodeBackend = "static-template";
   async generate(args: { spec: GameAssetSpec }) {
     return { controllerCode: STATIC_CONTROLLER_GD(args.spec) };
+  }
+}
+
+/**
+ * Pollinations.ai — keyless free image generation, no quota auth required.
+ * Implements both ConceptAdapter and SpriteAdapter via two thin wrappers.
+ *
+ *   GET https://image.pollinations.ai/prompt/<encoded>?width=W&height=H&nologo=true
+ */
+async function pollinationsFetch(prompt: string, width: number, height: number): Promise<Buffer> {
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${width}&height=${height}&nologo=true`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`pollinations: ${res.status} ${res.statusText}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+export class PollinationsConceptAdapter implements ConceptAdapter {
+  backend: ConceptBackend = "pollinations";
+  constructor(private readonly outDir: string) {}
+  async generate(args: { prompt: string; width: number; height: number }) {
+    const p = join(this.outDir, "concept.png");
+    await mkdir(dirname(p), { recursive: true });
+    try {
+      const png = await pollinationsFetch(args.prompt, args.width, args.height);
+      await writeFile(p, png);
+    } catch {
+      await writeFile(p, TRANSPARENT_PNG);
+    }
+    return { imagePath: p };
+  }
+}
+
+export class PollinationsSpriteAdapter implements SpriteAdapter {
+  backend: SpriteBackend = "pollinations";
+  constructor(private readonly outDir: string) {}
+  async generate(args: { prompt: string; frames: number; width: number; height: number }) {
+    const p = join(this.outDir, "sprites", `sheet_${args.frames}f.png`);
+    await mkdir(dirname(p), { recursive: true });
+    const sheetW = args.width * args.frames;
+    try {
+      const png = await pollinationsFetch(`${args.prompt} — sprite sheet, ${args.frames} frames horizontal, transparent background`, sheetW, args.height);
+      await writeFile(p, png);
+    } catch {
+      await writeFile(p, TRANSPARENT_PNG);
+    }
+    return { sheetPath: p };
   }
 }
 

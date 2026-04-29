@@ -6,6 +6,8 @@ import { join } from "node:path";
 import {
   MockGameRenderer,
   GameAssetsRendererImpl,
+  PollinationsConceptAdapter,
+  PollinationsSpriteAdapter,
   specFromGoal,
   priceOf,
   DEFAULT_BACKENDS,
@@ -125,6 +127,20 @@ describe("Praetor game-asset pipeline", () => {
     expect(project).toContain("window/size/viewport_width=1920");
     expect(project).toContain("window/size/viewport_height=1080");
     expect(existsSync(join(result.outputDir, "sprites", "sheet_8f.png"))).toBe(true);
+  });
+
+  it("Pollinations backends are zero-cost and falls back to transparent PNG when offline", async () => {
+    const spec = specFromGoal({ id: "poll", goal: "pollinations test" });
+    const b: GameBackends = { ...DEFAULT_BACKENDS, concept: "pollinations", sprite: "pollinations" };
+    expect(priceOf(b, spec)).toBe(0);
+
+    const tmp = mkdtempSync(join(tmpdir(), "praetor-game-"));
+    const concept = new PollinationsConceptAdapter(tmp);
+    const sprite = new PollinationsSpriteAdapter(tmp);
+    const c = await concept.generate({ prompt: "test", width: 64, height: 64 });
+    const s = await sprite.generate({ prompt: "test", frames: 4, width: 32, height: 32 });
+    expect(existsSync(c.imagePath)).toBe(true);
+    expect(existsSync(s.sheetPath)).toBe(true);
   });
 
   it("defaultRenderer factory returns a working zero-cost renderer", async () => {
