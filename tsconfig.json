@@ -20,9 +20,14 @@
     { "path": "packages/design" },
     { "path": "packages/seo" },
     { "path": "packages/ugc" },
+    { "path": "packages/game-assets" },
     { "path": "packages/scrape" },
     { "path": "packages/knowledge" },
-    { "path": "packages/business-ops" }
+    { "path": "packages/business-ops" },
+    { "path": "packages/tools" },
+    { "path": "packages/mcp" },
+    { "path": "packages/sandbox" },
+    { "path": "packages/router" }
   ],
   "files": []
 }

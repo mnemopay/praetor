@@ -111,21 +111,48 @@ export interface Biller {
 }
 
 /**
- * Live Stripe binding. Real implementation calls Stripe's `/v1/invoices` +
- * `/v1/invoiceitems` endpoints; here we ship a thin sketch that mints a
- * payment link via the public `/v1/payment_links` API. Production deploys
- * should use the user's existing Stripe code — this is the smallest binding
- * that proves the surface compiles + roundtrips.
+ * Live Stripe binding. Posts a Checkout Session with inline `price_data` for
+ * each line item — a single API call that mints a hosted payment URL without
+ * requiring pre-created Stripe Products/Prices. Form-encoded per Stripe's
+ * convention.
  */
 export class StripeBiller implements Biller {
-  constructor(private readonly apiKey: string) {}
+  constructor(
+    private readonly apiKey: string,
+    private readonly opts: { successUrl?: string; cancelUrl?: string; fetchImpl?: typeof fetch } = {},
+  ) {}
   async issue(inv: Invoice): Promise<InvoiceResult> {
     if (!this.apiKey) throw new Error("StripeBiller: missing apiKey");
-    const total = invoiceTotal(inv);
+    const f = this.opts.fetchImpl ?? globalThis.fetch;
+    const params = new URLSearchParams();
+    params.set("mode", "payment");
+    params.set("success_url", this.opts.successUrl ?? "https://getbizsuite.com/thanks");
+    params.set("cancel_url", this.opts.cancelUrl ?? "https://getbizsuite.com/cancel");
+    params.set("client_reference_id", inv.id);
+    if (inv.customerEmail) params.set("customer_email", inv.customerEmail);
+    inv.lineItems.forEach((li, i) => {
+      params.set(`line_items[${i}][price_data][currency]`, "usd");
+      params.set(`line_items[${i}][price_data][product_data][name]`, li.description);
+      params.set(`line_items[${i}][price_data][unit_amount]`, String(Math.round(li.unitPriceUsd * 100)));
+      params.set(`line_items[${i}][quantity]`, String(li.quantity));
+    });
+    const res = await f("https://api.stripe.com/v1/checkout/sessions", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.apiKey}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: params.toString(),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`StripeBiller: ${res.status} ${text.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as { id?: string; url?: string };
     return {
       invoice: inv,
-      totalUsd: total,
-      paymentLink: `https://buy.stripe.com/draft/${encodeURIComponent(inv.id)}`,
+      totalUsd: invoiceTotal(inv),
+      paymentLink: data.url,
       provider: "stripe",
     };
   }
@@ -212,6 +239,60 @@ export class CalComScheduler implements Scheduler {
     return {
       id: `cal:${this.username}:${req.eventTypeSlug}:${Date.now()}`,
       bookingUrl: url,
+      startAt: req.startAt,
+      provider: "cal.com",
+    };
+  }
+}
+
+/**
+ * Live Cal.com v2 booking. If `startAt` is supplied, posts to /v2/bookings to
+ * lock the slot directly (returns a real bookingUid). If not, falls back to
+ * the public booking link so a charter can defer slot selection to the
+ * attendee.
+ */
+export class CalComApiScheduler implements Scheduler {
+  constructor(
+    private readonly opts: {
+      apiKey: string;
+      username: string;
+      eventTypeId?: number;
+      fetchImpl?: typeof fetch;
+    },
+  ) {}
+  async schedule(req: MeetingRequest): Promise<MeetingResult> {
+    if (!req.startAt || !this.opts.eventTypeId) {
+      return new CalComScheduler(this.opts.username).schedule(req);
+    }
+    const f = this.opts.fetchImpl ?? globalThis.fetch;
+    const res = await f("https://api.cal.com/v2/bookings", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.opts.apiKey}`,
+        "content-type": "application/json",
+        "cal-api-version": "2024-08-13",
+      },
+      body: JSON.stringify({
+        eventTypeId: this.opts.eventTypeId,
+        start: req.startAt,
+        attendee: {
+          name: req.attendeeName ?? req.attendeeEmail,
+          email: req.attendeeEmail,
+          timeZone: "UTC",
+        },
+        lengthInMinutes: req.durationMinutes,
+        metadata: req.notes ? { notes: req.notes } : undefined,
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`CalComApiScheduler: ${res.status} ${text.slice(0, 200)}`);
+    }
+    const data = (await res.json()) as { data?: { uid?: string; bookingUid?: string }; uid?: string };
+    const id = data.data?.uid ?? data.data?.bookingUid ?? data.uid ?? `cal:${Date.now()}`;
+    return {
+      id,
+      bookingUrl: `https://app.cal.com/booking/${id}`,
       startAt: req.startAt,
       provider: "cal.com",
     };
@@ -306,4 +387,115 @@ export class BusinessOps {
   static mock(): BusinessOps {
     return new BusinessOps(new MockEmailSender(), new MockBiller(), new MockScheduler());
   }
+}
+
+// ---------- audit wrapper + factory ----------------------------------------
+
+/** Minimal shape of a Merkle-style auditor. Matches @praetor/core MerkleAudit. */
+export interface AuditSink {
+  record: (type: string, data: Record<string, unknown>) => void;
+}
+
+/**
+ * Wrap any BusinessOps so every email / invoice / meeting / contact mutation
+ * lands in the Merkle chain. Uses the same auditor a charter mission already
+ * uses, so the Article 12 bundle picks these events up automatically.
+ */
+export function auditedBusinessOps(ops: BusinessOps, audit: AuditSink): BusinessOps {
+  const email: EmailSender = {
+    send: async (msg) => {
+      audit.record("email.send.start", { to: msg.to, subject: msg.subject, provider: detectProvider(ops.email) });
+      try {
+        const r = await ops.email.send(msg);
+        audit.record("email.send.ok", { to: msg.to, id: r.id, status: r.status, provider: r.provider });
+        return r;
+      } catch (e) {
+        audit.record("email.send.error", { to: msg.to, error: (e as Error).message });
+        throw e;
+      }
+    },
+  };
+  const biller: Biller = {
+    issue: async (inv) => {
+      audit.record("invoice.issue.start", { id: inv.id, customerEmail: inv.customerEmail, total: invoiceTotal(inv) });
+      try {
+        const r = await ops.biller.issue(inv);
+        audit.record("invoice.issue.ok", { id: inv.id, totalUsd: r.totalUsd, paymentLink: r.paymentLink, provider: r.provider });
+        return r;
+      } catch (e) {
+        audit.record("invoice.issue.error", { id: inv.id, error: (e as Error).message });
+        throw e;
+      }
+    },
+  };
+  const scheduler: Scheduler = {
+    schedule: async (req) => {
+      audit.record("meeting.schedule.start", { attendee: req.attendeeEmail, slug: req.eventTypeSlug, startAt: req.startAt });
+      try {
+        const r = await ops.scheduler.schedule(req);
+        audit.record("meeting.schedule.ok", { id: r.id, bookingUrl: r.bookingUrl, provider: r.provider });
+        return r;
+      } catch (e) {
+        audit.record("meeting.schedule.error", { attendee: req.attendeeEmail, error: (e as Error).message });
+        throw e;
+      }
+    },
+  };
+  const contacts: ContactStore = {
+    upsert: async (c) => {
+      const r = await ops.contacts.upsert(c);
+      audit.record("contact.upsert", { email: c.email, tags: c.tags ?? [] });
+      return r;
+    },
+    get: (e) => ops.contacts.get(e),
+    list: (f) => ops.contacts.list(f),
+    remove: async (e) => {
+      const r = await ops.contacts.remove(e);
+      if (r.removed) audit.record("contact.remove", { email: e });
+      return r;
+    },
+  };
+  return new BusinessOps(email, biller, scheduler, contacts);
+}
+
+function detectProvider(s: EmailSender): string {
+  if (s instanceof MailerooSender) return "maileroo";
+  if (s instanceof MockEmailSender) return "mock";
+  return "unknown";
+}
+
+/**
+ * Resolve the live BusinessOps stack from environment. Reads:
+ *   MAILEROO_API_KEY                → live Maileroo email
+ *   STRIPE_SECRET_KEY (sk_*)        → live Stripe Checkout billing
+ *   CALCOM_API_KEY + CAL_USERNAME   → live Cal.com booking (with optional CALCOM_EVENT_TYPE_ID)
+ *   CAL_USERNAME alone              → public Cal.com link only
+ * Anything missing falls back to the mock adapter so a partial environment
+ * still runs end-to-end.
+ */
+export function defaultBusinessOps(env: NodeJS.ProcessEnv = process.env): BusinessOps {
+  const email: EmailSender = env.MAILEROO_API_KEY ? new MailerooSender(env.MAILEROO_API_KEY) : new MockEmailSender();
+
+  const stripeKey = env.STRIPE_SECRET_KEY ?? env.STRIPE_API_KEY;
+  const biller: Biller = stripeKey
+    ? new StripeBiller(stripeKey, {
+        successUrl: env.STRIPE_SUCCESS_URL,
+        cancelUrl: env.STRIPE_CANCEL_URL,
+      })
+    : new MockBiller();
+
+  let scheduler: Scheduler;
+  if (env.CALCOM_API_KEY && env.CAL_USERNAME) {
+    scheduler = new CalComApiScheduler({
+      apiKey: env.CALCOM_API_KEY,
+      username: env.CAL_USERNAME,
+      eventTypeId: env.CALCOM_EVENT_TYPE_ID ? Number(env.CALCOM_EVENT_TYPE_ID) : undefined,
+    });
+  } else if (env.CAL_USERNAME) {
+    scheduler = new CalComScheduler(env.CAL_USERNAME);
+  } else {
+    scheduler = new MockScheduler();
+  }
+
+  return new BusinessOps(email, biller, scheduler);
 }

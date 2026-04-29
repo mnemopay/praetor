@@ -1,11 +1,30 @@
 {
   "name": "@praetor/core",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Praetor core — charter schema, mission lifecycle, Merkle audit chain (SHA-256, EU AI Act Article 12 ready), event bus.",
+  "keywords": ["agent", "runtime", "charter", "merkle", "audit", "eu-ai-act", "praetor"],
+  "homepage": "https://praetor.mnemopay.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JerryOmiagbo/praetor.git",
+    "directory": "packages/core"
+  },
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
-    "build": "tsc -b"
-  }
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public" }
 }

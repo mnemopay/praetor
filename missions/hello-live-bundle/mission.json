@@ -1,0 +1,28 @@
+{
+  "bundleVersion": "praetor-article12/1",
+  "operatorId": "unknown",
+  "charter": {
+    "name": "hello",
+    "goal": "print a hello world result through the praetor runtime",
+    "budgetMaxUsd": 1
+  },
+  "result": {
+    "charterName": "hello",
+    "status": "ok",
+    "spentUsd": 0.12250000000000001,
+    "outputs": [
+      "```\n>>> PRAETOR RUNTIME v1.0\n>>> EXEC: print(\"Hello, World!\")\n─────────────────────────────\nHello, World!\n─────────────────────────────\n>>> EXIT: 0 (success)\n```",
+      "hello.txt"
+    ],
+    "auditDigest": "7bdee48d389cb6d5604461373e8b947034d57fa6e0a35ac8e4c1b1c6210240d3",
+    "startedAt": "2026-04-28T19:34:12.859Z",
+    "finishedAt": "2026-04-28T19:34:15.512Z"
+  },
+  "retention": {
+    "months": 6,
+    "startedAt": "2026-04-28T19:34:12.859Z",
+    "retainUntil": "2026-10-28T19:34:12.859Z",
+    "legalBasis": "EU AI Act Article 12 — automatic logging requirement"
+  },
+  "chainVerified": true
+}

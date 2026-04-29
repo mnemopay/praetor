@@ -42,3 +42,38 @@ export class HermesAgent implements AgentAdapter {
     throw new Error("HermesAgent: not yet implemented — see docs/ROADMAP.md");
   }
 }
+
+import type { LlmRouter, RouteRequirements } from "@praetor/router";
+
+/**
+ * LlmAgent — issues a single chat completion via Praetor's router.
+ * The router picks a provider based on charter route requirements; the agent
+ * returns the model's text as the first output and reports real USD spend.
+ */
+export class LlmAgent implements AgentAdapter {
+  readonly name = "llm";
+  constructor(
+    private router: LlmRouter,
+    private route: RouteRequirements = { quality: "fast" },
+    private systemPrompt = "You are Praetor, a mission runtime. Return concise, useful output for the goal.",
+  ) {}
+  async run(input: AgentRunInput): Promise<AgentRunResult> {
+    const r = await this.router.chat(
+      {
+        messages: [
+          { role: "system", content: this.systemPrompt },
+          { role: "user", content: input.goal },
+        ],
+        maxTokens: 256,
+      },
+      this.route,
+    );
+    if (r.costUsd > input.budgetUsd) {
+      throw new Error(`LlmAgent: cost ${r.costUsd.toFixed(4)} exceeds budget ${input.budgetUsd}`);
+    }
+    return {
+      outputs: [r.text, ...input.outputs],
+      spentUsd: r.costUsd,
+    };
+  }
+}

@@ -1,0 +1,29 @@
+[
+  {
+    "ts": "2026-04-28T19:34:12.862Z",
+    "type": "mission.start",
+    "data": {
+      "charter": "hello",
+      "budget": {
+        "maxUsd": 1,
+        "approvalThresholdUsd": 5
+      }
+    }
+  },
+  {
+    "ts": "2026-04-28T19:34:12.864Z",
+    "type": "budget.reserved",
+    "data": {
+      "holdId": "mock_1777404852864_upzr89",
+      "maxUsd": 1
+    }
+  },
+  {
+    "ts": "2026-04-28T19:34:15.511Z",
+    "type": "mission.complete",
+    "data": {
+      "outputs": 2,
+      "spentUsd": 0.12250000000000001
+    }
+  }
+]

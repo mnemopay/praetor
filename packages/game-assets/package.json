@@ -1,0 +1,30 @@
+{
+  "name": "@praetor/game-assets",
+  "version": "0.1.0",
+  "description": "Praetor game-asset pipeline — one spec → runnable Godot 4.4 project. Sprites, textures, music, SFX, scene tree, controller stub. Same adapter contract as @praetor/ugc; reuses image, audio, and music backends.",
+  "keywords": ["godot", "game-assets", "sprites", "ai-game-dev", "praetor"],
+  "homepage": "https://praetor.mnemopay.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JerryOmiagbo/praetor.git",
+    "directory": "packages/game-assets"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public" }
+}

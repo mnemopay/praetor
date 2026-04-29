@@ -14,7 +14,7 @@
  *   - X.com cookie path (paywalled tweets are unreachable without `auth_token`)
  *   - per-host rate-limit + polite default User-Agent
  */
-export type ScrapeBackend = "fetch" | "playwright" | "firecrawl";
+export type ScrapeBackend = "fetch" | "playwright" | "crawl4ai" | "playwright-mcp" | "firecrawl";
 
 export interface ScrapeRequest {
   url: string;
@@ -56,6 +56,10 @@ const DEFAULT_UA =
 export class FetchAdapter implements ScrapeAdapter {
   name: ScrapeBackend = "fetch";
   async fetch(req: ScrapeRequest): Promise<ScrapeResult> {
+    const x = parseXStatusUrl(req.url);
+    if (x && !req.headers?.Cookie) {
+      return this.fetchXSyndication(req, x);
+    }
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), req.timeoutMs ?? 15_000);
     try {
@@ -83,6 +87,63 @@ export class FetchAdapter implements ScrapeAdapter {
     } finally {
       clearTimeout(t);
     }
+  }
+
+  /**
+   * X / Twitter status URLs hit a logged-out JS shell on x.com itself, so we
+   * transparently swap to the public syndication endpoint that returns the
+   * full tweet JSON without auth. Charters that need authenticated reads
+   * (paywalled / locked accounts) should pass an `xCookie(...)` header — the
+   * presence of `Cookie` shortcuts this rewrite back to the raw HTML path.
+   */
+  private async fetchXSyndication(req: ScrapeRequest, x: { id: string }): Promise<ScrapeResult> {
+    const synURL = `https://cdn.syndication.twimg.com/tweet-result?id=${x.id}&token=a`;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), req.timeoutMs ?? 15_000);
+    try {
+      const res = await fetch(synURL, {
+        headers: { "user-agent": req.userAgent ?? DEFAULT_UA, accept: "application/json" },
+        signal: ctrl.signal,
+      });
+      const body = await res.text();
+      let text: string | undefined;
+      try {
+        const parsed = JSON.parse(body) as { text?: string; user?: { screen_name?: string; name?: string }; created_at?: string; favorite_count?: number; conversation_count?: number };
+        text = parsed.text
+          ? `@${parsed.user?.screen_name ?? "?"} (${parsed.user?.name ?? ""}) · ${parsed.created_at ?? ""}\n\n${parsed.text}\n\n♥ ${parsed.favorite_count ?? 0} · 💬 ${parsed.conversation_count ?? 0}`
+          : undefined;
+      } catch {
+        // body wasn't JSON; leave text undefined
+      }
+      return {
+        url: req.url,
+        status: res.status,
+        contentType: res.headers.get("content-type") ?? "application/json",
+        body,
+        fetchedAt: new Date().toISOString(),
+        backend: this.name,
+        text,
+      };
+    } finally {
+      clearTimeout(t);
+    }
+  }
+}
+
+/**
+ * Parse `https://x.com/<handle>/status/<id>` (or twitter.com / mobile.twitter
+ * / fxtwitter / vxtwitter mirrors) into `{ id }`. Returns null for any URL
+ * that doesn't match a status path.
+ */
+export function parseXStatusUrl(url: string): { id: string } | null {
+  try {
+    const u = new URL(url);
+    if (!/(^|\.)(x\.com|twitter\.com|fxtwitter\.com|vxtwitter\.com)$/i.test(u.hostname)) return null;
+    const m = u.pathname.match(/\/status\/(\d+)\b/);
+    if (!m) return null;
+    return { id: m[1] };
+  } catch {
+    return null;
   }
 }
 
@@ -152,6 +213,82 @@ export class FirecrawlAdapter implements ScrapeAdapter {
 }
 
 /**
+ * Crawl4AI adapter — talks to a self-hosted Crawl4AI service over HTTP.
+ * Crawl4AI's `/crawl` endpoint already returns markdown + cleaned HTML, so we
+ * preserve the markdown in `text` and the HTML in `body`. Per Jerry's standing
+ * rule, this is the default JS-rendering backend, not Playwright direct.
+ */
+export class Crawl4AIAdapter implements ScrapeAdapter {
+  name: ScrapeBackend = "crawl4ai";
+  constructor(
+    private readonly opts: { baseUrl: string; apiKey?: string; fetchImpl?: typeof fetch } = {
+      baseUrl: "http://localhost:11235",
+    },
+  ) {}
+  async fetch(req: ScrapeRequest): Promise<ScrapeResult> {
+    const f = this.opts.fetchImpl ?? globalThis.fetch;
+    if (typeof f !== "function") throw new Error("Crawl4AIAdapter: no fetch available");
+    const res = await f(`${this.opts.baseUrl.replace(/\/$/, "")}/crawl`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(this.opts.apiKey ? { authorization: `Bearer ${this.opts.apiKey}` } : {}),
+      },
+      body: JSON.stringify({ urls: [req.url], priority: 5 }),
+    });
+    const data = (await res.json()) as { results?: { html?: string; cleaned_html?: string; markdown?: string; status_code?: number }[] };
+    const r0 = data.results?.[0] ?? {};
+    const html = r0.cleaned_html ?? r0.html ?? "";
+    return {
+      url: req.url,
+      status: r0.status_code ?? res.status,
+      contentType: "text/html",
+      body: html,
+      fetchedAt: new Date().toISOString(),
+      backend: this.name,
+      jsonLd: extractJsonLd(html),
+      text: r0.markdown ?? stripHtml(html),
+    };
+  }
+}
+
+/**
+ * playwright-mcp adapter — bridges to a running playwright-mcp server via
+ * any object that exposes `callTool(name, args)` (so it works with the
+ * `@praetor/mcp` McpClient and any other JSON-RPC bridge). The MCP server is
+ * expected to expose `browser_navigate` followed by `browser_snapshot`
+ * (or equivalent text-extraction tool), per playwright-mcp's documented API.
+ */
+export interface McpToolBridge {
+  callTool: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+}
+
+export class PlaywrightMcpAdapter implements ScrapeAdapter {
+  name: ScrapeBackend = "playwright-mcp";
+  constructor(
+    private readonly bridge: McpToolBridge,
+    private readonly opts: { navigateTool?: string; snapshotTool?: string } = {},
+  ) {}
+  async fetch(req: ScrapeRequest): Promise<ScrapeResult> {
+    const navTool = this.opts.navigateTool ?? "browser_navigate";
+    const snapTool = this.opts.snapshotTool ?? "browser_snapshot";
+    await this.bridge.callTool(navTool, { url: req.url });
+    const snap = (await this.bridge.callTool(snapTool, {})) as { html?: string; text?: string; status?: number };
+    const html = typeof snap?.html === "string" ? snap.html : "";
+    return {
+      url: req.url,
+      status: typeof snap?.status === "number" ? snap.status : 200,
+      contentType: "text/html",
+      body: html,
+      fetchedAt: new Date().toISOString(),
+      backend: this.name,
+      jsonLd: extractJsonLd(html),
+      text: snap?.text ?? stripHtml(html),
+    };
+  }
+}
+
+/**
  * Top-level scrape entry. Charter calls `scrape(req)` and gets a normalized
  * result regardless of which backend ran. Charters never need to know about
  * Playwright vs Firecrawl plumbing.
@@ -162,6 +299,8 @@ export class Scraper {
     this.adapters = {
       fetch: adapters.fetch ?? new FetchAdapter(),
       playwright: adapters.playwright ?? new PlaywrightAdapter(),
+      crawl4ai: adapters.crawl4ai ?? new Crawl4AIAdapter(),
+      "playwright-mcp": adapters["playwright-mcp"] ?? unattachedPlaywrightMcp(),
       firecrawl: adapters.firecrawl ?? new FirecrawlAdapter(""),
     };
   }
@@ -256,4 +395,32 @@ export function xCookie(args: { authToken: string; ct0?: string }): { Cookie: st
   return args.ct0
     ? { Cookie: parts.join("; "), "x-csrf-token": args.ct0 }
     : { Cookie: parts.join("; ") };
+}
+
+function unattachedPlaywrightMcp(): ScrapeAdapter {
+  return {
+    name: "playwright-mcp",
+    fetch: async () => {
+      throw new Error(
+        'PlaywrightMcpAdapter not configured. Pass new PlaywrightMcpAdapter(mcpClient) via Scraper({ "playwright-mcp": ... }).',
+      );
+    },
+  };
+}
+
+/**
+ * Build a Scraper using whatever adapters the environment makes available.
+ *   - CRAWL4AI_URL set → Crawl4AI is the default JS-render backend
+ *   - FIRECRAWL_API_KEY set → Firecrawl available as paid escape hatch
+ * Fetch is always available.
+ */
+export function defaultScraper(env: NodeJS.ProcessEnv = process.env): Scraper {
+  const adapters: Partial<Record<ScrapeBackend, ScrapeAdapter>> = {};
+  if (env.CRAWL4AI_URL) {
+    adapters.crawl4ai = new Crawl4AIAdapter({ baseUrl: env.CRAWL4AI_URL, apiKey: env.CRAWL4AI_API_KEY });
+  }
+  if (env.FIRECRAWL_API_KEY) {
+    adapters.firecrawl = new FirecrawlAdapter(env.FIRECRAWL_API_KEY);
+  }
+  return new Scraper(adapters);
 }

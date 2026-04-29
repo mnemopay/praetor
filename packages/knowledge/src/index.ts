@@ -1,3 +1,5 @@
+export * from "./mnemopay.js";
+
 /**
  * Praetor Knowledge pack — a vector knowledge base. Charters call
  * `kb.ingest(content)` with scraped or generated text and `kb.query(question)`

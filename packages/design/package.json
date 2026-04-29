@@ -1,9 +1,30 @@
 {
   "name": "@praetor/design",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Praetor design pack — Spline, HTML-in-Canvas-3D, Hypeframes, Remotion, AntiGravity-style hero presets, declarative-UI emitter. Motion-first landing pages from a single spec.",
+  "keywords": ["design", "spline", "three.js", "remotion", "motion", "praetor"],
+  "homepage": "https://praetor.mnemopay.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JerryOmiagbo/praetor.git",
+    "directory": "packages/design"
+  },
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc -b" }
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": { "node": ">=20" },
+  "publishConfig": { "access": "public" }
 }

@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://praetor.mnemopay.com/sitemap.xml
+
+# AI crawler manifest
+User-agent: GPTBot
+Allow: /
+User-agent: ClaudeBot
+Allow: /
+User-agent: PerplexityBot
+Allow: /

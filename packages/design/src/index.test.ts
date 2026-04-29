@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { DesignPack } from "./index.js";
+import { DesignPack, listSplinePresets, resolveSplinePreset } from "./index.js";
 
 describe("DesignPack declarative UI", () => {
   const pack = new DesignPack();
@@ -54,6 +54,87 @@ describe("DesignPack declarative UI", () => {
     const root = art.files.find((f) => f.path === "src/Root.tsx")!.contents;
     expect(root).toContain('id="hello"');
     expect(root).toContain("durationInFrames={60}");
+  });
+
+  it("Spline preset library exposes the BizSuite hero preset", () => {
+    const all = listSplinePresets();
+    expect(all.map((p) => p.id)).toContain("godly-3d-orb");
+    const orb = resolveSplinePreset("godly-3d-orb");
+    expect(orb.sceneUrl).toContain("splinecode");
+    expect(orb.background).toContain("radial-gradient");
+  });
+
+  it("renderSplinePreset emits a viewer with attributes from the preset", () => {
+    const out = pack.renderSplinePreset("ai-audit-shield");
+    expect(out).toContain("<spline-viewer");
+    expect(out).toContain("loading-policy=\"lazy\"");
+    expect(out).toContain("AuditShield");
+  });
+
+  it("toDeleVideo writes scenes under compositions/<id>/", () => {
+    const art = pack.toDeleVideo({
+      id: "praetor-spot",
+      durationInFrames: 120,
+      fps: 30,
+      width: 1080,
+      height: 1920,
+      scenes: [{ type: "div", children: ["spot"] }],
+    });
+    const paths = art.files.map((f) => f.path);
+    expect(paths.some((p) => p.includes("dele-video/src/compositions/praetor-spot"))).toBe(true);
+    expect(paths).toContain("dele-video/compositions/praetor-spot/manifest.json");
+  });
+
+  it("toUgcPipeline emits a job spec under ugc-pipeline/jobs/", () => {
+    const art = pack.toUgcPipeline({
+      id: "Article 12 Wedge",
+      durationSec: 22,
+      background: { type: "color", value: "#0a0a0a" },
+      voiceover: { text: "Get Article 12 compliant in 1 hour.", provider: "edge" },
+      textOverlays: [{ text: "Aug 2 deadline", startSec: 0, endSec: 3, position: "top" }],
+      cta: { text: "praetor.dev", url: "https://praetor.dev" },
+    });
+    const job = art.files[0];
+    expect(job.path).toBe("ugc-pipeline/jobs/article-12-wedge.json");
+    const parsed = JSON.parse(job.contents);
+    expect(parsed.renderer).toBe("kenburns-edge-tts");
+    expect(parsed.aspect).toBe("9:16");
+  });
+
+  it("renderHtmlInCanvas3D emits a self-contained THREE+CSS3D hero with interactive HTML cards", () => {
+    const art = pack.renderHtmlInCanvas3D({
+      title: "BizSuite",
+      background: "#000",
+      rings: true,
+      faceParallax: true,
+      mouseParallax: true,
+      cards: [
+        { id: "starter", html: "<h2>Starter</h2><p>$2.5K</p><a class='cta' href='#buy'>Buy</a>" },
+        { id: "growth", html: "<h2>Growth</h2><p>$5K</p>" },
+        { id: "scale", html: "<h2>Scale</h2><p>$10K</p>" },
+      ],
+    });
+    const idx = art.files.find((f) => f.path === "index.html")!.contents;
+    expect(idx).toContain("<title>BizSuite</title>");
+    expect(idx).toContain("CSS3DRenderer");
+    expect(idx).toContain("TorusGeometry");
+    expect(idx).toContain("FaceLandmarker");
+    expect(idx).toContain("Starter");
+    expect(idx).toContain('data-id="growth"');
+    const fallback = art.files.find((f) => f.path === "spec.json")!.contents;
+    expect(JSON.parse(fallback).cards).toHaveLength(3);
+  });
+
+  it("renderHtmlInCanvas3D omits face/rings code when disabled", () => {
+    const art = pack.renderHtmlInCanvas3D({
+      title: "Plain",
+      faceParallax: false,
+      rings: false,
+      cards: [{ id: "a", html: "<h2>A</h2>" }],
+    });
+    const idx = art.files.find((f) => f.path === "index.html")!.contents;
+    expect(idx).toContain("FACE_PARALLAX = false");
+    expect(idx).toContain("RINGS = false");
   });
 
   it("renders a Hypeframes scene with embedded runtime", async () => {
