@@ -1,0 +1,78 @@
+:root {
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  color: #e6e9ef;
+  background: #0b1020;
+  line-height: 1.4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.layout {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 2rem 1rem 3rem;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.9rem;
+}
+
+.subtitle {
+  margin: 0.35rem 0 0;
+  color: #9aa3b2;
+}
+
+.refresh {
+  border: 1px solid #35415d;
+  background: #121b33;
+  color: #e6e9ef;
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.9rem;
+  cursor: pointer;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.8rem;
+}
+
+.card {
+  background: linear-gradient(180deg, #121b33, #0e162a);
+  border: 1px solid #2a3552;
+  border-radius: 0.8rem;
+  padding: 0.9rem;
+}
+
+.card-label {
+  margin: 0;
+  color: #9aa3b2;
+  font-size: 0.85rem;
+}
+
+.card-value {
+  margin: 0.45rem 0;
+  font-size: 1.45rem;
+  font-weight: 600;
+}
+
+.card-hint {
+  margin: 0;
+  color: #7f8ba3;
+  font-size: 0.85rem;
+}
