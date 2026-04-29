@@ -1,0 +1,1 @@
+{\n  "name": "dashboard",\n  "version": "1.0.0",\n  "description": "A dashboard package",\n  "main": "dist/index.js",\n  "scripts": {\n    "build": "vite build",\n    "start": "vite"\n  },\n  "devDependencies": {\n    "vite": "^2.0.0",\n    "typescript": "^4.0.0"\n  }\n}
