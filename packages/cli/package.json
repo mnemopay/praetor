@@ -26,6 +26,9 @@
     "@praetor/tools": "*",
     "@praetor/sysadmin": "*",
     "@praetor/game-assets": "*",
+    "@praetor/sandbox": "*",
+    "@praetor/vision": "*",
+    "@praetor/social": "*",
     "yaml": "^2.5.0"
   },
   "author": "Jerry <jerry@getbizsuite.com>",
