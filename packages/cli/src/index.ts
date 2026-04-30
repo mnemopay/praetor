@@ -110,7 +110,7 @@ function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAud
     }
   };
 
-  return new NativePraetorEngine(router, defaultRegistry(), { fiscal, audit }, route);
+  return new NativePraetorEngine(router, registry, { fiscal, audit }, route);
 }
 
 function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
