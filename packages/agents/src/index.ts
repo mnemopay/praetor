@@ -25,30 +25,85 @@ export class EchoAgent implements AgentAdapter {
   }
 }
 
+import type { LlmRouter, RouteRequirements, ChatMessage } from "@praetor/router";
+import type { ToolRegistry, ToolCallContext } from "@praetor/tools";
+
 /**
- * OpenClawAgent and HermesAgent are placeholders that wire to the user's existing
- * NovaClaw stack in WSL. Implementations land in week 2 — see docs/ROADMAP.md.
+ * NativePraetorEngine — the core agentic loop of Praetor.
+ * Replaces OpenClaw/Hermes stubs.
  */
-export class OpenClawAgent implements AgentAdapter {
-  readonly name = "openclaw";
-  async run(_input: AgentRunInput): Promise<AgentRunResult> {
-    throw new Error("OpenClawAgent: not yet implemented — see docs/ROADMAP.md");
+export class NativePraetorEngine implements AgentAdapter {
+  readonly name = "native-praetor";
+  constructor(
+    private router: LlmRouter,
+    private tools: ToolRegistry,
+    private toolContext: ToolCallContext,
+    private route: RouteRequirements = { quality: "fast" },
+    private systemPrompt = "You are Praetor, a mission runtime. Use tools to achieve the goal.",
+    private maxSteps = 15
+  ) {}
+
+  async run(input: AgentRunInput): Promise<AgentRunResult> {
+    let spentUsd = 0;
+    const messages: ChatMessage[] = [
+      { role: "system", content: this.systemPrompt },
+      { role: "user", content: input.goal },
+    ];
+
+    const availableTools = this.tools.list().map(t => ({
+      type: "function" as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.schema as unknown as Record<string, unknown>,
+      }
+    }));
+
+    for (let step = 0; step < this.maxSteps; step++) {
+      if (spentUsd > input.budgetUsd) {
+        throw new Error(`NativePraetorEngine: cost ${spentUsd.toFixed(4)} exceeds budget ${input.budgetUsd}`);
+      }
+
+      const r = await this.router.chat(
+        { messages, maxTokens: 1024, tools: availableTools.length > 0 ? availableTools : undefined },
+        this.route
+      );
+      spentUsd += r.costUsd;
+
+      messages.push({
+        role: "assistant",
+        content: r.text,
+        tool_calls: r.toolCalls
+      });
+
+      if (!r.toolCalls || r.toolCalls.length === 0) {
+        return { outputs: [r.text, ...input.outputs], spentUsd };
+      }
+
+      for (const call of r.toolCalls) {
+        try {
+          const args = JSON.parse(call.function.arguments);
+          const result = await this.tools.call(call.function.name, args, this.toolContext);
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: typeof result === "string" ? result : JSON.stringify(result)
+          });
+        } catch (e) {
+          messages.push({
+            role: "tool",
+            tool_call_id: call.id,
+            content: `Error: ${(e as Error).message}`
+          });
+        }
+      }
+    }
+    throw new Error(`NativePraetorEngine: max steps (${this.maxSteps}) reached.`);
   }
 }
-
-export class HermesAgent implements AgentAdapter {
-  readonly name = "hermes";
-  async run(_input: AgentRunInput): Promise<AgentRunResult> {
-    throw new Error("HermesAgent: not yet implemented — see docs/ROADMAP.md");
-  }
-}
-
-import type { LlmRouter, RouteRequirements } from "@praetor/router";
 
 /**
  * LlmAgent — issues a single chat completion via Praetor's router.
- * The router picks a provider based on charter route requirements; the agent
- * returns the model's text as the first output and reports real USD spend.
  */
 export class LlmAgent implements AgentAdapter {
   readonly name = "llm";

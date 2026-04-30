@@ -11,8 +11,9 @@ import {
   type Charter,
   type MissionResult,
 } from "@praetor/core";
-import { MockPayments } from "@praetor/payments";
-import { EchoAgent, LlmAgent, type AgentAdapter } from "@praetor/agents";
+import { MockPayments, type PaymentsAdapter } from "@praetor/payments";
+import { EchoAgent, LlmAgent, NativePraetorEngine, type AgentAdapter } from "@praetor/agents";
+import { defaultRegistry, type FiscalGate } from "@praetor/tools";
 import { defaultScraper, type ScrapeBackend } from "@praetor/scrape";
 import { chunkText, defaultKnowledgeBase } from "@praetor/knowledge";
 import { DEFAULT_CATALOGUE, LlmRouter, registerDefaultProviders, type RouteRequirements } from "@praetor/router";
@@ -38,7 +39,7 @@ function loadDotenv(...candidates: string[]): void {
   }
 }
 
-function pickAgent(charter: Charter): AgentAdapter {
+function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAudit): AgentAdapter {
   const env = process.env;
   const haveAny = env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY || env.OPENROUTER_API_KEY;
   if (!haveAny) return new EchoAgent();
@@ -53,7 +54,28 @@ function pickAgent(charter: Charter): AgentAdapter {
   const route: RouteRequirements = charterRoute ?? { quality: "fast" };
 
   const router = registerDefaultProviders(new LlmRouter(catalogue), env, { catalogue });
-  return new LlmAgent(router, route);
+
+  const holds = new Map<string, string>();
+  const fiscal: FiscalGate = {
+    async approve(call) {
+      if (call.estUsd > 0) {
+        const { holdId } = await payments.reserve(call.estUsd);
+        holds.set(call.tool, holdId);
+      }
+    },
+    async settle(call) {
+      if (call.estUsd > 0) {
+        const holdId = holds.get(call.tool);
+        if (holdId) {
+          if (call.error) await payments.release(holdId);
+          else await payments.settle(holdId, call.actualUsd ?? call.estUsd);
+          holds.delete(call.tool);
+        }
+      }
+    }
+  };
+
+  return new NativePraetorEngine(router, defaultRegistry(), { fiscal, audit }, route);
 }
 
 function parseYaml(src: string): unknown {
@@ -102,11 +124,12 @@ async function cmdRun(args: string[]) {
       process.stderr.write(JSON.stringify({ i: index, ts: event.ts, type: event.type, chain: chainHash.slice(0, 12), data: event.data }) + "\n");
     });
   }
-  const agent = pickAgent(charter);
+  const payments = new MockPayments();
+  const agent = pickAgent(charter, payments, audit);
   if (verbose) process.stderr.write(JSON.stringify({ agent: agent.name }) + "\n");
   const result = await runMission({
     charter,
-    payments: new MockPayments(),
+    payments,
     agents: { run: async (c) => agent.run({ goal: c.goal, outputs: c.outputs, budgetUsd: c.budget.maxUsd }) },
     audit,
   });

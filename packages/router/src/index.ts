@@ -17,18 +17,22 @@
  */
 
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
+  tool_call_id?: string;
 }
 
 export interface ChatRequest {
   messages: ChatMessage[];
   temperature?: number;
   maxTokens?: number;
+  tools?: { type: "function"; function: { name: string; description?: string; parameters?: Record<string, unknown> } }[];
 }
 
 export interface ChatResponse {
   text: string;
+  toolCalls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
   model: string;
   inputTokens: number;
   outputTokens: number;

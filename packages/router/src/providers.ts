@@ -57,6 +57,7 @@ export class OpenRouterProvider implements Provider {
       messages: req.messages,
       ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
       ...(req.maxTokens !== undefined ? { max_tokens: req.maxTokens } : {}),
+      ...(req.tools && req.tools.length > 0 ? { tools: req.tools } : {}),
     };
     const res = await this.fetchImpl(`${this.baseUrl}/chat/completions`, {
       method: "POST",
@@ -73,16 +74,18 @@ export class OpenRouterProvider implements Provider {
       throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 500)}`);
     }
     const data = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
+      choices?: { message?: { content?: string; tool_calls?: any[] } }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number };
       model?: string;
     };
     const text = data.choices?.[0]?.message?.content ?? "";
+    const toolCalls = data.choices?.[0]?.message?.tool_calls;
     const inputTokens = data.usage?.prompt_tokens ?? 0;
     const outputTokens = data.usage?.completion_tokens ?? 0;
     const card = lookupCard(this.catalogue, modelId);
     return {
       text,
+      ...(toolCalls ? { toolCalls } : {}),
       model: data.model ?? modelId,
       inputTokens,
       outputTokens,
@@ -177,6 +180,7 @@ export class OpenAIProvider implements Provider {
       model: id,
       messages: req.messages,
     };
+    if (req.tools && req.tools.length > 0) body.tools = req.tools;
     if (req.temperature !== undefined && !isReasoning) body.temperature = req.temperature;
     if (req.maxTokens !== undefined) {
       if (isReasoning) body.max_completion_tokens = req.maxTokens;
@@ -195,16 +199,18 @@ export class OpenAIProvider implements Provider {
       throw new Error(`OpenAI ${res.status}: ${text.slice(0, 500)}`);
     }
     const data = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
+      choices?: { message?: { content?: string; tool_calls?: any[] } }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number };
       model?: string;
     };
     const text = data.choices?.[0]?.message?.content ?? "";
+    const toolCalls = data.choices?.[0]?.message?.tool_calls;
     const inputTokens = data.usage?.prompt_tokens ?? 0;
     const outputTokens = data.usage?.completion_tokens ?? 0;
     const card = lookupCard(this.catalogue, modelId);
     return {
       text,
+      ...(toolCalls ? { toolCalls } : {}),
       model: data.model ?? modelId,
       inputTokens,
       outputTokens,
