@@ -19,6 +19,8 @@ import { chunkText, defaultKnowledgeBase } from "@praetor/knowledge";
 import { DEFAULT_CATALOGUE, LlmRouter, registerDefaultProviders, type RouteRequirements } from "@praetor/router";
 import { DesignPack, type HtmlInCanvas3DSpec, type SplinePresetId } from "@praetor/design";
 import { renderSite, type SiteManifest } from "@praetor/seo";
+import { defaultBusinessOps, auditedBusinessOps, type AuditSink } from "@praetor/business-ops";
+import { defaultRenderer } from "@praetor/game-assets";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 
@@ -111,11 +113,16 @@ function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAud
   return new NativePraetorEngine(router, defaultRegistry(), { fiscal, audit }, route);
 }
 
-function buildEnhancedRegistry(missionId: string) {
+function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
   const reg = defaultRegistry();
   const kb = defaultKnowledgeBase({ missionId });
   const design = new DesignPack();
   const outDir = resolve(process.cwd(), "praetor-out");
+  
+  const rawOps = defaultBusinessOps(process.env);
+  const ops = audit ? auditedBusinessOps(rawOps, audit) : rawOps;
+  const scraper = defaultScraper(process.env);
+  const games = defaultRenderer({ outDir: join(outDir, "games") });
 
   reg.register(
     {
@@ -272,6 +279,154 @@ function buildEnhancedRegistry(missionId: string) {
     }
   );
 
+  reg.register(
+    {
+      name: "send_email",
+      description: "Send an outbound email (via Maileroo).",
+      schema: {
+        type: "object",
+        properties: {
+          to: { type: "string" },
+          from: { type: "string" },
+          subject: { type: "string" },
+          text: { type: "string" },
+          html: { type: "string" },
+          replyTo: { type: "string" }
+        },
+        required: ["to", "from", "subject", "text"]
+      },
+      tags: ["email", "outbound", "business"]
+    },
+    async (msg) => {
+      const res = await ops.email.send(msg as any);
+      return { success: true, id: res.id, status: res.status, provider: res.provider };
+    }
+  );
+
+  reg.register(
+    {
+      name: "issue_invoice",
+      description: "Issue a billing invoice (via Stripe).",
+      schema: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          customerEmail: { type: "string" },
+          customerName: { type: "string" },
+          lineItems: {
+            type: "array",
+            items: {
+              type: "object",
+              description: "LineItem spec {description: string, quantity: number, unitPriceUsd: number}"
+            }
+          },
+          dueAt: { type: "string" },
+          notes: { type: "string" }
+        },
+        required: ["id", "customerEmail", "lineItems"]
+      },
+      tags: ["billing", "invoice", "stripe", "business"]
+    },
+    async (inv) => {
+      const res = await ops.biller.issue(inv as any);
+      return { success: true, paymentLink: res.paymentLink, totalUsd: res.totalUsd, provider: res.provider };
+    }
+  );
+
+  reg.register(
+    {
+      name: "schedule_meeting",
+      description: "Schedule a meeting (via Cal.com).",
+      schema: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          attendeeEmail: { type: "string" },
+          attendeeName: { type: "string" },
+          eventTypeSlug: { type: "string" },
+          startAt: { type: "string" },
+          durationMinutes: { type: "integer" },
+          notes: { type: "string" }
+        },
+        required: ["title", "attendeeEmail", "eventTypeSlug"]
+      },
+      tags: ["scheduling", "meeting", "cal.com", "business"]
+    },
+    async (req) => {
+      const res = await ops.scheduler.schedule(req as any);
+      return { success: true, bookingUrl: res.bookingUrl, id: res.id, provider: res.provider };
+    }
+  );
+
+  reg.register(
+    {
+      name: "upsert_contact",
+      description: "Add or update a contact in the CRM layer.",
+      schema: {
+        type: "object",
+        properties: {
+          email: { type: "string" },
+          name: { type: "string" },
+          company: { type: "string" },
+          source: { type: "string" },
+          tags: {
+            type: "array",
+            items: { type: "string" }
+          }
+        },
+        required: ["email"]
+      },
+      tags: ["crm", "contact", "business"]
+    },
+    async (c) => {
+      const res = await ops.contacts.upsert(c as any);
+      return { success: true, contact: res };
+    }
+  );
+
+  reg.register(
+    {
+      name: "scrape_url",
+      description: "Scrape a webpage and return its textual content, markdown, or JSON-LD schema.",
+      schema: {
+        type: "object",
+        properties: {
+          url: { type: "string" }
+        },
+        required: ["url"]
+      },
+      tags: ["scrape", "research", "crawl"]
+    },
+    async ({ url }) => {
+      const res = await scraper.scrape({ url: url as string });
+      return { success: true, status: res.status, text: res.text?.slice(0, 5000) };
+    }
+  );
+
+  reg.register(
+    {
+      name: "generate_game_assets",
+      description: "Generate an entire playable Godot 4.4 game project based on a concept.",
+      schema: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Stable project ID without spaces e.g. retro-pong" },
+          goal: { type: "string", description: "One line idea of the game e.g. A retro platformer" },
+          spriteFrames: { type: "integer" },
+          textureTiles: { type: "integer" },
+          sfxCues: { type: "integer" },
+          audioMood: { type: "string" }
+        },
+        required: ["id", "goal"]
+      },
+      tags: ["game", "godot", "assets", "generation"]
+    },
+    async (spec) => {
+      const res = await games.render(spec as any);
+      return { success: true, projectPath: res.outputDir, costUsd: res.costUsd };
+    }
+  );
+
   return reg;
 }
 
@@ -333,7 +488,7 @@ async function cmdRun(args: string[]) {
     payments = new MockPayments();
   }
 
-  const registry = buildEnhancedRegistry(charter.name);
+  const registry = buildEnhancedRegistry(charter.name, audit);
   const agent = pickAgent(charter, payments, audit, registry);
   if (verbose) process.stderr.write(JSON.stringify({ agent: agent.name }) + "\n");
   const result = await runMission({
