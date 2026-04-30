@@ -15,6 +15,9 @@
     "@praetor/knowledge": "*",
     "@praetor/router": "*",
     "@praetor/business-ops": "*",
+    "@praetor/design": "*",
+    "@praetor/seo": "*",
+    "@praetor/tools": "*",
     "yaml": "^2.5.0"
   }
 }

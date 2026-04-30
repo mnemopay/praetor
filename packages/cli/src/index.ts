@@ -17,6 +17,8 @@ import { defaultRegistry, type FiscalGate } from "@praetor/tools";
 import { defaultScraper, type ScrapeBackend } from "@praetor/scrape";
 import { chunkText, defaultKnowledgeBase } from "@praetor/knowledge";
 import { DEFAULT_CATALOGUE, LlmRouter, registerDefaultProviders, type RouteRequirements } from "@praetor/router";
+import { DesignPack, type HtmlInCanvas3DSpec, type SplinePresetId } from "@praetor/design";
+import { renderSite, type SiteManifest } from "@praetor/seo";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 
@@ -109,9 +111,11 @@ function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAud
   return new NativePraetorEngine(router, defaultRegistry(), { fiscal, audit }, route);
 }
 
-function buildRegistryWithKnowledge(missionId: string) {
+function buildEnhancedRegistry(missionId: string) {
   const reg = defaultRegistry();
   const kb = defaultKnowledgeBase({ missionId });
+  const design = new DesignPack();
+  const outDir = resolve(process.cwd(), "praetor-out");
 
   reg.register(
     {
@@ -157,6 +161,114 @@ function buildRegistryWithKnowledge(missionId: string) {
       }));
       const r = await kb.ingest(chunks);
       return { ingested: r.ingested };
+    }
+  );
+
+  reg.register(
+    {
+      name: "design_spline_preset",
+      description: "Generate a landing page using a 3D Spline preset.",
+      schema: {
+        type: "object",
+        properties: {
+          presetId: { type: "string", enum: ["godly-3d-orb", "fractional-ops-rings", "ai-audit-shield", "developer-portal-grid", "drone-proof-of-presence"] },
+          title: { type: "string" }
+        },
+        required: ["presetId", "title"]
+      },
+      tags: ["design", "3d", "landing_page"]
+    },
+    async ({ presetId, title }) => {
+      const pId = presetId as SplinePresetId;
+      const t = title as string;
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>${t}</title>
+  <style>body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }</style>
+</head>
+<body>
+  ${design.renderSplinePreset(pId)}
+</body>
+</html>`;
+      mkdirSync(outDir, { recursive: true });
+      const f = join(outDir, `spline-${pId}.html`);
+      writeFileSync(f, html);
+      return { success: true, message: `Landing page saved to ${f}` };
+    }
+  );
+
+  reg.register(
+    {
+      name: "design_html_in_canvas_3d",
+      description: "Generate a high-end 3D CSS parallax landing page with HTML cards.",
+      schema: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          background: { type: "string", description: "CSS background e.g. #0a0a0a" },
+          cards: {
+            type: "array",
+            items: {
+              type: "object",
+              description: "Card spec {id: string, html: string}"
+            }
+          }
+        },
+        required: ["title", "cards"]
+      },
+      tags: ["design", "3d", "landing_page"]
+    },
+    async ({ title, background, cards }) => {
+      const spec = { title, background, cards } as HtmlInCanvas3DSpec;
+      const art = design.renderHtmlInCanvas3D(spec);
+      mkdirSync(outDir, { recursive: true });
+      const written = [];
+      for (const file of art.files) {
+        const path = join(outDir, `canvas3d-${file.path}`);
+        writeFileSync(path, file.contents);
+        written.push(path);
+      }
+      return { success: true, message: `Canvas3D files saved to: ${written.join(", ")}` };
+    }
+  );
+
+  reg.register(
+    {
+      name: "generate_seo_site",
+      description: "Generate an SEO/GEO optimized site structure (sitemap, llms.txt, schema.org).",
+      schema: {
+        type: "object",
+        properties: {
+          origin: { type: "string", description: "e.g. https://example.com" },
+          pages: {
+            type: "array",
+            items: {
+              type: "object",
+              description: "Page spec {slug: string, title: string, description: string, aiDescription: string, bodyMarkdown: string}"
+            }
+          }
+        },
+        required: ["origin", "pages"]
+      },
+      tags: ["seo", "geo", "sitemap", "generator"]
+    },
+    async ({ origin, pages }) => {
+      const site = { origin, pages } as SiteManifest;
+      const art = renderSite(site);
+      const seoDir = join(outDir, "seo");
+      mkdirSync(seoDir, { recursive: true });
+      writeFileSync(join(seoDir, "sitemap.xml"), art.sitemapXml);
+      writeFileSync(join(seoDir, "robots.txt"), art.robotsTxt);
+      writeFileSync(join(seoDir, "ai.txt"), art.aiTxt);
+      writeFileSync(join(seoDir, "llms.txt"), art.llmsTxt);
+      writeFileSync(join(seoDir, "schema.jsonld"), art.schemaJsonLd);
+      for (const p of art.pages) {
+        mkdirSync(join(seoDir, p.slug), { recursive: true });
+        writeFileSync(join(seoDir, p.slug, "index.html"), p.html);
+      }
+      return { success: true, message: `SEO site generated at ${seoDir}` };
     }
   );
 
@@ -221,7 +333,7 @@ async function cmdRun(args: string[]) {
     payments = new MockPayments();
   }
 
-  const registry = buildRegistryWithKnowledge(charter.name);
+  const registry = buildEnhancedRegistry(charter.name);
   const agent = pickAgent(charter, payments, audit, registry);
   if (verbose) process.stderr.write(JSON.stringify({ agent: agent.name }) + "\n");
   const result = await runMission({
