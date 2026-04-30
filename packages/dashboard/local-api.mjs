@@ -2,8 +2,12 @@ import { createServer } from "node:http";
 import { exec } from "node:child_process";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, readFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { spawn } from "node:child_process";
+
+const activeMissions = new Map();
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..");
@@ -50,39 +54,7 @@ const server = createServer(async (req, res) => {
     });
     return;
   }
-  if (req.method === "POST" && req.url === "/api/upload") {
-    const body = await readBody(req);
-    let payload;
-    try {
-      payload = JSON.parse(body);
-    } catch {
-      json(res, 400, { ok: false, error: "Invalid JSON" });
-      return;
-    }
-    const { filename, data } = payload;
-    if (!filename || !data) {
-      json(res, 400, { ok: false, error: "filename and data (base64) are required" });
-      return;
-    }
-
-    try {
-      const uploadDir = resolve(repoRoot, ".praetor", "uploads");
-      await mkdir(uploadDir, { recursive: true });
-      const safeName = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
-      const id = randomBytes(4).toString("hex");
-      const finalName = `${id}-${safeName}`;
-      const filePath = join(uploadDir, finalName);
-      
-      const buffer = Buffer.from(data, "base64");
-      await writeFile(filePath, buffer);
-      
-      json(res, 200, { ok: true, path: filePath });
-    } catch (error) {
-      json(res, 500, { ok: false, error: error.message });
-    }
-    return;
-  }
-
+  
   if (req.method === "POST" && req.url === "/api/praetor") {
     const body = await readBody(req);
     let payload;
@@ -118,15 +90,26 @@ outputs:
 `.trim();
 
       await writeFile(charterPath, charterContent);
+      
+      const logPath = join(missionDir, `mission-${id}.log`);
+      const logStream = createWriteStream(logPath, { flags: 'a' });
+      
+      // Spawn detached
+      const child = spawn("npx", ["praetor", "run", charterPath], { cwd: repoRoot, shell: true });
+      child.stdout.pipe(logStream);
+      child.stderr.pipe(logStream);
+      
+      activeMissions.set(id, { child, logPath, startTime: Date.now() });
+      
+      child.on("close", (code) => {
+        activeMissions.delete(id);
+        logStream.end();
+      });
 
-      exec(\`npx praetor run \${charterPath}\`, { cwd: repoRoot, timeout: 300000, maxBuffer: 5 * 1024 * 1024 }, (error, stdout, stderr) => {
-        json(res, 200, {
-          ok: true,
-          text: (stdout + "\\n" + stderr).trim(),
-          model: "NativePraetorEngine",
-          provider: "praetor",
-          exitCode: error?.code ?? 0
-        });
+      json(res, 200, {
+        ok: true,
+        missionId: id,
+        message: "Mission spawned in background."
       });
     } catch (error) {
       json(res, 500, {
@@ -134,6 +117,30 @@ outputs:
         error: error.message,
       });
     }
+    return;
+  }
+  
+  if (req.method === "GET" && req.url.startsWith("/api/status")) {
+    const url = new URL(req.url, `http://${host}`);
+    const id = url.searchParams.get("id");
+    if (!id) {
+      json(res, 400, { ok: false, error: "id is required" });
+      return;
+    }
+    
+    const logPath = join(resolve(repoRoot, ".praetor"), `mission-${id}.log`);
+    let logContent = "";
+    try {
+      logContent = await readFile(logPath, "utf-8");
+    } catch {
+      // File might not exist yet or mission invalid
+    }
+    
+    json(res, 200, {
+      ok: true,
+      log: logContent,
+      running: activeMissions.has(id)
+    });
     return;
   }
 

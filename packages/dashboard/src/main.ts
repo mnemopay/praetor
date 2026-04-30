@@ -1,23 +1,7 @@
 import "./style.css";
+import { marked } from "marked";
+import DOMPurify from "dompurify";
 
-type Stat = {
-  label: string;
-  value: string;
-  hint: string;
-};
-
-const stats: Stat[] = [
-  { label: "Active Missions", value: "12", hint: "+3 today" },
-  { label: "Budget Reserved", value: "$4,920", hint: "Across open charters" },
-  { label: "Audit Entries", value: "18,442", hint: "Merkle-chained" },
-  { label: "Failed Runs", value: "1", hint: "Last 24h" },
-];
-
-type ChatReply = {
-  text: string;
-  commands: string[];
-  meta?: string;
-};
 const API_BASE = "http://127.0.0.1:8788";
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -26,50 +10,39 @@ if (!app) {
   throw new Error("dashboard: #app container not found");
 }
 
-const statCards = stats
-  .map(
-    (s) => `
-      <article class="card">
-        <p class="card-label">${s.label}</p>
-        <p class="card-value">${s.value}</p>
-        <p class="card-hint">${s.hint}</p>
-      </article>
-    `,
-  )
-  .join("");
-
 app.innerHTML = `
   <main class="layout">
     <header class="topbar">
       <div>
-        <h1>Praetor Dashboard</h1>
-        <p class="subtitle">Mission runtime health and command chat</p>
+        <h1>Praetor Command</h1>
+        <p class="subtitle">Autonomous Mission Control</p>
       </div>
-      <button class="refresh" type="button">Refresh</button>
     </header>
-    <section class="cards">${statCards}</section>
-    <section class="panel">
-      <h2>Talk to Praetor</h2>
-      <p class="panel-subtitle">Type naturally. Replies come from OpenRouter (when key is set) plus runnable CLI commands.</p>
-      <div id="chatLog" class="chat-log"></div>
-      <div id="stagedFiles" class="staged-files"></div>
-      <form id="chatForm" class="chat-form">
-        <label class="file-btn" title="Upload files">
-          <input type="file" id="chatFile" multiple />
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-        </label>
-        <input id="chatInput" class="chat-input" type="text" placeholder="Example: describe this image, or run a mission" />
-        <button class="refresh" type="submit">Send</button>
-      </form>
+    
+    <section class="cards">
+      <div class="card">
+        <p class="card-label">Active Daemons</p>
+        <p class="card-value" id="stat-active">0</p>
+        <p class="card-hint">Running in background</p>
+      </div>
+      <div class="card">
+        <p class="card-label">SysAdmin Status</p>
+        <p class="card-value">ONLINE</p>
+        <p class="card-hint">God-mode active</p>
+      </div>
+      <div class="card">
+        <p class="card-label">Fiscal Gate</p>
+        <p class="card-value">ACTIVE</p>
+        <p class="card-hint">MnemoPay Guarded</p>
+      </div>
     </section>
-    <section class="panel">
-      <h2>Supported CLI Commands</h2>
-      <ul class="cmd-list">
-        <li><code>npx praetor run &lt;charter.yaml&gt; [--article12 &lt;dir&gt;] [--save &lt;mission.json&gt;] [--operator &lt;id&gt;] [--verbose]</code></li>
-        <li><code>npx praetor article12 --in &lt;mission.json&gt; --out &lt;bundle-dir&gt; [--operator &lt;id&gt;]</code></li>
-        <li><code>npx praetor ingest &lt;url&gt; [--mission &lt;id&gt;] [--backend fetch|crawl4ai|playwright-mcp|firecrawl] [--chunk &lt;chars&gt;]</code></li>
-        <li><code>npx praetor design serve &lt;dir&gt; [--port &lt;n&gt;] [--host &lt;h&gt;]</code></li>
-      </ul>
+
+    <section class="glass-panel chat-container">
+      <div id="chatLog" class="chat-log"></div>
+      <form id="chatForm" class="chat-form">
+        <input id="chatInput" class="chat-input" type="text" placeholder="Assign a mission (e.g. 'Build a 3D Spline scene', 'Run a SEO audit on ...')" autocomplete="off" />
+        <button class="btn-primary" type="submit">Deploy Mission</button>
+      </form>
     </section>
   </main>
 `;
@@ -77,260 +50,149 @@ app.innerHTML = `
 const chatForm = document.querySelector<HTMLFormElement>("#chatForm");
 const chatInput = document.querySelector<HTMLInputElement>("#chatInput");
 const chatLog = document.querySelector<HTMLDivElement>("#chatLog");
-const chatFile = document.querySelector<HTMLInputElement>("#chatFile");
-const stagedFiles = document.querySelector<HTMLDivElement>("#stagedFiles");
+let activeMissionsCount = 0;
 
 if (!chatForm || !chatInput || !chatLog) {
-  throw new Error("dashboard: chat UI failed to initialize");
+  throw new Error("dashboard: UI failed to initialize");
 }
 
-appendMessage("assistant", {
-  text: "Ask in natural language. I will respond conversationally and suggest exact Praetor commands you can run or execute here.",
-  commands: [
-    "cd C:\\Users\\breia\\praetor",
-    "npm run praetor -- --help",
-  ],
-  meta: "LLM route: OpenRouter (if OPENROUTER_API_KEY is set)",
-});
-
-let selectedFiles: File[] = [];
-
-if (chatFile && stagedFiles) {
-  chatFile.addEventListener("change", () => {
-    if (chatFile.files) {
-      selectedFiles = Array.from(chatFile.files);
-      stagedFiles.innerHTML = selectedFiles.map(f => `<span class="staged-file">${f.name}</span>`).join("");
-    }
-  });
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(",")[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+appendMessage("assistant", "Greetings. I am Praetor, your autonomous digital employee. Provide me with a mission objective, and I will execute it in the background.", false);
 
 chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  let prompt = chatInput.value.trim();
-  if (!prompt && selectedFiles.length === 0) return;
+  const prompt = chatInput.value.trim();
+  if (!prompt) return;
 
-  appendMessage("user", { text: prompt || "[Files attached]", commands: [] });
+  appendMessage("user", prompt, false);
+  chatInput.value = "";
   chatInput.disabled = true;
-  if (chatFile) chatFile.disabled = true;
 
   const sendButton = chatForm.querySelector<HTMLButtonElement>("button[type='submit']");
   if (sendButton) {
     sendButton.disabled = true;
-    sendButton.textContent = "Running Mission...";
+    sendButton.textContent = "Deploying...";
   }
 
-  try {
-    const uploadedPaths: string[] = [];
-    if (selectedFiles.length > 0) {
-      for (const file of selectedFiles) {
-        const base64 = await fileToBase64(file);
-        const res = await fetch(`${API_BASE}/api/upload`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ filename: file.name, data: base64 }),
-        });
-        const payload = await res.json() as { ok: boolean; path?: string; error?: string };
-        if (payload.ok && payload.path) {
-          uploadedPaths.push(payload.path);
-        } else {
-          throw new Error(payload.error || "Upload failed");
-        }
-      }
-      prompt += "\\n\\nAttached files:\\n" + uploadedPaths.map(p => `- ${p}`).join("\\n");
-    }
-
-    const llm = await askPraetor(prompt);
-    const commands = suggestCommands(prompt);
-    appendMessage("assistant", {
-      text: llm.text,
-      commands,
-      meta: llm.meta,
-    });
-  } catch (error) {
-    appendMessage("assistant", {
-      text: `Error executing mission: ${String(error)}`,
-      commands: [],
-    });
-  } finally {
-    chatInput.value = "";
-    selectedFiles = [];
-    if (stagedFiles) stagedFiles.innerHTML = "";
-    if (chatFile) {
-      chatFile.value = "";
-      chatFile.disabled = false;
-    }
-    chatInput.disabled = false;
-    if (sendButton) {
-      sendButton.disabled = false;
-      sendButton.textContent = "Send";
-    }
-    chatInput.focus();
-  }
-});
-
-function suggestCommands(prompt: string): string[] {
-  const p = prompt.toLowerCase();
-  if (p.includes("hello") || (p.includes("run") && p.includes("charter"))) {
-    return [
-      "cd C:\\Users\\breia\\praetor",
-      "npm run build",
-      "npx praetor run charters/hello.yaml --verbose",
-    ];
-  }
-  if (p.includes("article12") || p.includes("audit bundle") || p.includes("bundle")) {
-    return [
-      "cd C:\\Users\\breia\\praetor",
-      "npx praetor article12 --in missions/hello-live.json --out missions/hello-live-bundle --operator jerry",
-    ];
-  }
-  if (p.includes("ingest") || p.includes("crawl") || p.includes("scrape") || p.includes("url")) {
-    return [
-      "cd C:\\Users\\breia\\praetor",
-      "npx praetor ingest https://example.com --backend fetch --mission demo",
-    ];
-  }
-  if (p.includes("serve") || p.includes("design")) {
-    return [
-      "cd C:\\Users\\breia\\praetor",
-      "npx praetor design serve examples-out --host 127.0.0.1 --port 4310",
-    ];
-  }
-  if (p.includes("help") || p.includes("what can i")) {
-    return [
-      "npx praetor --help",
-      "npx praetor run charters/hello.yaml",
-      "npx praetor ingest https://example.com",
-    ];
-  }
-  return [
-    "cd C:\\Users\\breia\\praetor",
-    "npx praetor --help",
-  ];
-}
-
-function appendMessage(role: "user" | "assistant", reply: ChatReply): void {
-  const wrap = document.createElement("article");
-  wrap.className = `msg msg-${role}`;
-  const text = document.createElement("p");
-  text.className = "msg-text";
-  text.textContent = reply.text;
-  wrap.appendChild(text);
-  if (reply.meta) {
-    const meta = document.createElement("p");
-    meta.className = "msg-meta";
-    meta.textContent = reply.meta;
-    wrap.appendChild(meta);
-  }
-
-  for (const cmd of reply.commands) {
-    const row = document.createElement("div");
-    row.className = "cmd-row";
-    const code = document.createElement("code");
-    code.textContent = cmd;
-    const controls = document.createElement("div");
-    controls.className = "cmd-controls";
-    const run = document.createElement("button");
-    run.type = "button";
-    run.className = "run-btn";
-    run.textContent = "Run";
-    run.addEventListener("click", async () => {
-      run.disabled = true;
-      run.textContent = "Running...";
-      const output = await runCommand(cmd);
-      const out = document.createElement("pre");
-      out.className = "cmd-output";
-      out.textContent = output;
-      wrap.appendChild(out);
-      run.disabled = false;
-      run.textContent = "Run";
-      chatLog.scrollTop = chatLog.scrollHeight;
-    });
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "copy-btn";
-    copy.textContent = "Copy";
-    copy.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(cmd);
-      copy.textContent = "Copied";
-      setTimeout(() => {
-        copy.textContent = "Copy";
-      }, 900);
-    });
-    controls.append(run, copy);
-    row.append(code, controls);
-    wrap.appendChild(row);
-  }
-
-  chatLog.appendChild(wrap);
-  chatLog.scrollTop = chatLog.scrollHeight;
-}
-
-async function askPraetor(prompt: string): Promise<{ text: string; meta: string }> {
   try {
     const res = await fetch(`${API_BASE}/api/praetor`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt }),
     });
-    const payload = (await res.json()) as {
-      ok: boolean;
-      text?: string;
-      model?: string;
-      provider?: string;
-      error?: string;
-      exitCode?: number;
-    };
-    if (!payload.ok) {
-      return {
-        text: `Praetor mission failed: ${payload.error ?? "unknown error"}.`,
-        meta: "Engine error",
-      };
+    
+    const payload = await res.json();
+    
+    if (payload.ok && payload.missionId) {
+      activeMissionsCount++;
+      updateStats();
+      appendMessage("assistant", `**Mission Deployed:** \`${payload.missionId}\`\nTracking Merkle Audit Log...`, true, payload.missionId);
+    } else {
+      appendMessage("assistant", `Mission failed to start: ${payload.error}`, false);
     }
-    return {
-      text: payload.text?.trim() || "Mission completed with no output.",
-      meta: `Executed via ${payload.model ?? "Praetor Engine"} (Exit ${payload.exitCode ?? 0})`,
-    };
   } catch (error) {
-    return {
-      text: `Could not reach local API at ${API_BASE}. Start it with: npm run --workspace @praetor/dashboard api`,
-      meta: String(error),
-    };
+    appendMessage("assistant", `Network Error: ${String(error)}. Is the API running?`, false);
+  } finally {
+    chatInput.disabled = false;
+    if (sendButton) {
+      sendButton.disabled = false;
+      sendButton.textContent = "Deploy Mission";
+    }
+    chatInput.focus();
   }
+});
+
+function updateStats() {
+  const el = document.getElementById("stat-active");
+  if (el) el.textContent = activeMissionsCount.toString();
 }
 
-async function runCommand(command: string): Promise<string> {
-  try {
-    const res = await fetch(`${API_BASE}/api/execute`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command }),
-    });
-    const payload = (await res.json()) as {
-      ok: boolean;
-      error?: string;
-      exitCode?: number;
-      stdout?: string;
-      stderr?: string;
-    };
-    if (!payload.ok) {
-      return `Error: ${payload.error ?? "execution failed"}`;
+function appendMessage(role: "user" | "assistant", text: string, isMarkdown: boolean, missionId?: string): void {
+  const wrap = document.createElement("div");
+  wrap.className = `msg msg-${role}`;
+  
+  if (isMarkdown) {
+    const content = document.createElement("div");
+    content.className = "markdown-body";
+    // Basic config for marked if needed, DOMPurify protects from XSS
+    const rawHtml = marked.parse(text) as string;
+    content.innerHTML = DOMPurify.sanitize(rawHtml, { ADD_TAGS: ['iframe'], ADD_ATTR: ['allowfullscreen', 'frameborder'] });
+    wrap.appendChild(content);
+  } else {
+    const p = document.createElement("p");
+    p.textContent = text;
+    p.style.margin = "0";
+    wrap.appendChild(p);
+  }
+
+  if (missionId) {
+    const statusBox = document.createElement("div");
+    statusBox.className = "mission-status";
+    statusBox.textContent = "Waiting for audit log initialization...";
+    wrap.appendChild(statusBox);
+    
+    // Start polling for this mission
+    pollStatus(missionId, statusBox);
+  }
+
+  chatLog.appendChild(wrap);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+async function pollStatus(missionId: string, statusBox: HTMLElement) {
+  let isRunning = true;
+  
+  while (isRunning) {
+    try {
+      const res = await fetch(`${API_BASE}/api/status?id=${missionId}`);
+      const payload = await res.json();
+      
+      if (payload.ok) {
+        if (payload.log && payload.log.length > 0) {
+           // Parse the log
+           const lines = payload.log.split('\n').filter(Boolean);
+           let displayLog = "";
+           let finalOutput = null;
+           
+           for (const line of lines) {
+             try {
+               const parsed = JSON.parse(line);
+               if (parsed.type) {
+                 displayLog += `[${parsed.ts}] ${parsed.type}: ${parsed.data.name || ''}\n`;
+               } else if (parsed.status === "ok" || parsed.status === "error") {
+                 finalOutput = parsed;
+               }
+             } catch {
+               displayLog += line + "\n";
+             }
+           }
+           statusBox.textContent = displayLog;
+           chatLog.scrollTop = chatLog.scrollHeight;
+           
+           if (!payload.running && finalOutput) {
+             isRunning = false;
+             activeMissionsCount--;
+             updateStats();
+             
+             if (finalOutput.status === "error") {
+                appendMessage("assistant", `**Mission Error:**\n\`\`\`json\n${JSON.stringify(finalOutput, null, 2)}\n\`\`\``, true);
+             } else if (finalOutput.outputs && finalOutput.outputs.length > 0) {
+                // Render the agent's final text output as beautiful markdown!
+                const textOutput = typeof finalOutput.outputs[0] === 'string' ? finalOutput.outputs[0] : JSON.stringify(finalOutput.outputs);
+                appendMessage("assistant", textOutput, true);
+             }
+           }
+        }
+        
+        if (!payload.running) {
+          isRunning = false;
+        }
+      }
+    } catch (err) {
+      console.error(err);
     }
-    const out = [payload.stdout?.trim(), payload.stderr?.trim()].filter(Boolean).join("\n\n");
-    return out || `Command completed (exit ${payload.exitCode ?? 0})`;
-  } catch (error) {
-    return `Could not reach local API at ${API_BASE}. Start it with: npm run --workspace @praetor/dashboard api\n\n${String(error)}`;
+    
+    if (isRunning) {
+      await new Promise(r => setTimeout(r, 1000));
+    }
   }
 }
