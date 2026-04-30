@@ -402,3 +402,112 @@ function hostname(origin: string) {
     return origin;
   }
 }
+
+/* ---------- Advanced GEO/SEO Tools --------------------------------------- */
+
+export async function submitIndexNow(host: string, key: string, keyLocation: string, urlList: string[]) {
+  const payload = {
+    host,
+    key,
+    keyLocation,
+    urlList,
+  };
+  const res = await fetch("https://api.indexnow.org/indexnow", {
+    method: "POST",
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify(payload),
+  });
+  return { status: res.status, ok: res.ok };
+}
+
+export function extractGeoProfile(html: string) {
+  const profile = {
+    aiDescription: "",
+    jsonLd: [] as Record<string, unknown>[],
+    headings: { h1: 0, h2: 0, h3: 0 },
+    title: "",
+  };
+
+  const titleMatch = html.match(/<title>(.*?)<\/title>/is);
+  if (titleMatch) profile.title = titleMatch[1].trim();
+
+  const aiDescMatch = html.match(/<meta\s+name=["']ai:description["']\s+content=["'](.*?)["']/is);
+  if (aiDescMatch) profile.aiDescription = aiDescMatch[1].trim();
+
+  const jsonLdMatches = html.matchAll(/<script\s+type=["']application\/ld\+json["']>(.*?)<\/script>/gis);
+  for (const m of jsonLdMatches) {
+    try {
+      profile.jsonLd.push(JSON.parse(m[1]));
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  profile.headings.h1 = (html.match(/<h1[\s>]/gi) || []).length;
+  profile.headings.h2 = (html.match(/<h2[\s>]/gi) || []).length;
+  profile.headings.h3 = (html.match(/<h3[\s>]/gi) || []).length;
+
+  return profile;
+}
+
+export function analyzeContentSeo(text: string, targetKeyword?: string) {
+  // Strip simple HTML tags if present
+  const plainText = text.replace(/<[^>]+>/g, " ");
+  const words = plainText.match(/\b\w+\b/g) || [];
+  const wordCount = words.length;
+  
+  const sentences = plainText.split(/[.!?]+/).filter(Boolean);
+  const sentenceCount = sentences.length || 1;
+  
+  const syllables = words.reduce((acc, word) => {
+    const s = word.toLowerCase().replace(/[^a-z]/g, "");
+    if (s.length <= 3) return acc + 1;
+    const count = (s.match(/[aeiouy]{1,2}/g) || []).length;
+    return acc + Math.max(1, count);
+  }, 0);
+
+  // Flesch Reading Ease
+  const readingEase = 206.835 - 1.015 * (wordCount / sentenceCount) - 84.6 * (syllables / wordCount);
+
+  let keywordDensity = 0;
+  if (targetKeyword) {
+    const regex = new RegExp(`\\b${targetKeyword}\\b`, "gi");
+    const matches = plainText.match(regex) || [];
+    keywordDensity = wordCount > 0 ? (matches.length / wordCount) * 100 : 0;
+  }
+
+  return {
+    wordCount,
+    readingEase: Number(readingEase.toFixed(1)),
+    gradeLevel: readingEase > 90 ? "5th Grade" : readingEase > 60 ? "8th Grade" : "College",
+    keywordDensity: Number(keywordDensity.toFixed(2)),
+  };
+}
+
+export function generateOutreachSequence(targetSite: string, authorName: string, niche: string) {
+  return [
+    {
+      step: 1,
+      subject: `Quick question about ${targetSite}`,
+      body: `Hi ${authorName},\n\nI was just reading your recent post about ${niche} on ${targetSite} and loved your insights.\n\nI recently published a comprehensive piece on a similar topic. I thought it might be a valuable addition for your readers. Let me know if you're open to checking it out!\n\nBest,`
+    },
+    {
+      step: 2,
+      subject: `Re: Quick question about ${targetSite}`,
+      body: `Hi ${authorName},\n\nJust bubbling this up in case you missed it. No pressure at all if it's not a fit for ${targetSite}.\n\nCheers,`
+    },
+    {
+      step: 3,
+      subject: `Final follow up - ${targetSite}`,
+      body: `Hi ${authorName},\n\nI won't bug you again, but wanted to send one last note. Keep up the great work in the ${niche} space!\n\nBest,`
+    }
+  ];
+}
+
+export function generateOgImageUrl(title: string, backgroundUrl?: string) {
+  let url = `https://image.pollinations.ai/prompt/${encodeURIComponent(title)}?width=1200&height=630&nologo=true`;
+  if (backgroundUrl) {
+    url += `&seed=${encodeURIComponent(backgroundUrl)}`; // Using seed loosely as a deterministic variation
+  }
+  return url;
+}

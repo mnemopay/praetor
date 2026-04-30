@@ -18,7 +18,7 @@ import { defaultScraper, type ScrapeBackend } from "@praetor/scrape";
 import { chunkText, defaultKnowledgeBase } from "@praetor/knowledge";
 import { DEFAULT_CATALOGUE, LlmRouter, registerDefaultProviders, type RouteRequirements } from "@praetor/router";
 import { DesignPack, type HtmlInCanvas3DSpec, type SplinePresetId } from "@praetor/design";
-import { renderSite, type SiteManifest } from "@praetor/seo";
+import { renderSite, submitIndexNow, extractGeoProfile, analyzeContentSeo, generateOutreachSequence, generateOgImageUrl, type SiteManifest } from "@praetor/seo";
 import { defaultBusinessOps, auditedBusinessOps, type AuditSink } from "@praetor/business-ops";
 import { defaultRenderer } from "@praetor/game-assets";
 import { createHash } from "node:crypto";
@@ -424,6 +424,113 @@ function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
     async (spec) => {
       const res = await games.render(spec as any);
       return { success: true, projectPath: res.outputDir, costUsd: res.costUsd };
+    }
+  );
+
+  reg.register(
+    {
+      name: "submit_index_now",
+      description: "Submit a list of URLs to the IndexNow protocol to force instant search engine crawling.",
+      schema: {
+        type: "object",
+        properties: {
+          host: { type: "string", description: "Your domain e.g. example.com" },
+          key: { type: "string" },
+          keyLocation: { type: "string", description: "e.g. https://example.com/key.txt" },
+          urlList: {
+            type: "array",
+            items: { type: "string", description: "URL to submit" }
+          }
+        },
+        required: ["host", "key", "keyLocation", "urlList"]
+      },
+      tags: ["seo", "indexnow", "crawler"]
+    },
+    async ({ host, key, keyLocation, urlList }) => {
+      const res = await submitIndexNow(host as string, key as string, keyLocation as string, urlList as string[]);
+      return { success: true, status: res.status, ok: res.ok };
+    }
+  );
+
+  reg.register(
+    {
+      name: "profile_geo_competitor",
+      description: "Analyze a competitor's URL for Generative Engine Optimization (AI description, JSON-LD, headings).",
+      schema: {
+        type: "object",
+        properties: {
+          competitorUrl: { type: "string" }
+        },
+        required: ["competitorUrl"]
+      },
+      tags: ["seo", "geo", "competitor", "analysis"]
+    },
+    async ({ competitorUrl }) => {
+      const res = await scraper.scrape({ url: competitorUrl as string });
+      if (!res.text && !res.body) return { success: false, error: "Failed to scrape" };
+      const profile = extractGeoProfile(res.body || res.text || "");
+      return { success: true, profile };
+    }
+  );
+
+  reg.register(
+    {
+      name: "analyze_content_seo",
+      description: "Analyze text content for SEO readability, keyword density, and Flesch-Kincaid score.",
+      schema: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          targetKeyword: { type: "string" }
+        },
+        required: ["text"]
+      },
+      tags: ["seo", "content", "analysis"]
+    },
+    async ({ text, targetKeyword }) => {
+      const analysis = analyzeContentSeo(text as string, targetKeyword as string | undefined);
+      return { success: true, analysis };
+    }
+  );
+
+  reg.register(
+    {
+      name: "geo_outreach_sequence",
+      description: "Generate a 3-step personalized backlink outreach email sequence.",
+      schema: {
+        type: "object",
+        properties: {
+          targetSite: { type: "string" },
+          authorName: { type: "string" },
+          niche: { type: "string" }
+        },
+        required: ["targetSite", "authorName", "niche"]
+      },
+      tags: ["seo", "geo", "outreach", "email"]
+    },
+    async ({ targetSite, authorName, niche }) => {
+      const sequence = generateOutreachSequence(targetSite as string, authorName as string, niche as string);
+      return { success: true, sequence };
+    }
+  );
+
+  reg.register(
+    {
+      name: "generate_og_images",
+      description: "Dynamically generate a 1200x630 OpenGraph social share image URL using Pollinations AI.",
+      schema: {
+        type: "object",
+        properties: {
+          title: { type: "string" },
+          backgroundUrl: { type: "string" }
+        },
+        required: ["title"]
+      },
+      tags: ["seo", "social", "opengraph", "image"]
+    },
+    async ({ title, backgroundUrl }) => {
+      const url = generateOgImageUrl(title as string, backgroundUrl as string | undefined);
+      return { success: true, imageUrl: url };
     }
   );
 

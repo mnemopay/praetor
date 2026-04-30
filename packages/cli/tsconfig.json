@@ -9,6 +9,10 @@
     { "path": "../scrape" },
     { "path": "../knowledge" },
     { "path": "../router" },
-    { "path": "../business-ops" }
+    { "path": "../business-ops" },
+    { "path": "../seo" },
+    { "path": "../design" },
+    { "path": "../game-assets" },
+    { "path": "../tools" }
   ]
 }
