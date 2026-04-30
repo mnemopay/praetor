@@ -18,6 +18,7 @@
     "@praetor/design": "*",
     "@praetor/seo": "*",
     "@praetor/tools": "*",
+    "@praetor/sysadmin": "*",
     "@praetor/game-assets": "*",
     "yaml": "^2.5.0"
   }

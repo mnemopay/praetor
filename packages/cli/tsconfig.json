@@ -12,6 +12,7 @@
     { "path": "../business-ops" },
     { "path": "../seo" },
     { "path": "../design" },
+    { "path": "../sysadmin" },
     { "path": "../game-assets" },
     { "path": "../tools" }
   ]

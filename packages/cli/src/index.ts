@@ -20,6 +20,7 @@ import { DEFAULT_CATALOGUE, LlmRouter, registerDefaultProviders, type RouteRequi
 import { DesignPack, type HtmlInCanvas3DSpec, type SplinePresetId } from "@praetor/design";
 import { renderSite, submitIndexNow, extractGeoProfile, analyzeContentSeo, generateOutreachSequence, generateOgImageUrl, type SiteManifest } from "@praetor/seo";
 import { defaultBusinessOps, auditedBusinessOps, type AuditSink } from "@praetor/business-ops";
+import { runCommand, readFile, writeFile, listDir } from "@praetor/sysadmin";
 import { defaultRenderer } from "@praetor/game-assets";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -531,6 +532,87 @@ function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
     async ({ title, backgroundUrl }) => {
       const url = generateOgImageUrl(title as string, backgroundUrl as string | undefined);
       return { success: true, imageUrl: url };
+    }
+  );
+
+  reg.register(
+    {
+      name: "run_command",
+      description: "Execute a terminal command (PowerShell/Bash) on the host machine.",
+      schema: {
+        type: "object",
+        properties: {
+          command: { type: "string" },
+          cwd: { type: "string" }
+        },
+        required: ["command"]
+      },
+      tags: ["sysadmin", "os", "terminal", "execute"]
+    },
+    async ({ command, cwd }) => {
+      const res = await runCommand(command as string, cwd as string | undefined);
+      return { success: res.exitCode === 0, stdout: res.stdout, stderr: res.stderr, exitCode: res.exitCode };
+    }
+  );
+
+  reg.register(
+    {
+      name: "read_file",
+      description: "Read the contents of a file on the local file system.",
+      schema: {
+        type: "object",
+        properties: {
+          path: { type: "string" }
+        },
+        required: ["path"]
+      },
+      tags: ["sysadmin", "os", "file", "read"]
+    },
+    async ({ path }) => {
+      const res = await readFile(path as string);
+      if (res.error) return { success: false, error: res.error };
+      return { success: true, content: res.content };
+    }
+  );
+
+  reg.register(
+    {
+      name: "write_file",
+      description: "Write or overwrite contents to a file on the local file system.",
+      schema: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          content: { type: "string" }
+        },
+        required: ["path", "content"]
+      },
+      tags: ["sysadmin", "os", "file", "write"]
+    },
+    async ({ path, content }) => {
+      const res = await writeFile(path as string, content as string);
+      if (res.error) return { success: false, error: res.error };
+      return { success: true };
+    }
+  );
+
+  reg.register(
+    {
+      name: "list_dir",
+      description: "List all files and directories in a given path.",
+      schema: {
+        type: "object",
+        properties: {
+          path: { type: "string" }
+        },
+        required: ["path"]
+      },
+      tags: ["sysadmin", "os", "file", "list"]
+    },
+    async ({ path }) => {
+      const res = await listDir(path as string);
+      if (res.error) return { success: false, error: res.error };
+      return { success: true, items: res.items };
     }
   );
 
