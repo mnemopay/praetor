@@ -1,0 +1,26 @@
+[
+  {
+    "name": "@praetor/seo",
+    "version": "0.0.1",
+    "provider": "praetor",
+    "description": "GEO and SEO automation toolkit."
+  },
+  {
+    "name": "@praetor/design",
+    "version": "0.0.1",
+    "provider": "praetor",
+    "description": "Design and media generation pack."
+  },
+  {
+    "name": "@praetor/business-ops",
+    "version": "0.0.1",
+    "provider": "praetor",
+    "description": "Business operations surfaces for outbound, invoices, and CRM."
+  },
+  {
+    "name": "@praetor/scrape",
+    "version": "0.0.1",
+    "provider": "praetor",
+    "description": "Web scraping and crawl tooling."
+  }
+]

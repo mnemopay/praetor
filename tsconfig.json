@@ -31,7 +31,8 @@
     { "path": "packages/sysadmin" },
     { "path": "packages/vision" },
     { "path": "packages/social" },
-    { "path": "packages/sdk" }
+    { "path": "packages/sdk" },
+    { "path": "packages/api" }
   ],
   "files": []
 }
