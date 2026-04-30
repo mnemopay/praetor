@@ -50,12 +50,12 @@ export class SysadminModule {
       if (this.sandbox) {
         const res = await this.sandbox.exec(`ls -lA "${path}"`);
         if (res.exitCode !== 0) throw new Error(res.stderr);
-        const items = res.stdout.trim().split("\n").slice(1).map(line => {
+        const items = res.stdout.trim().split("\n").slice(1).map((line: string) => {
           const parts = line.trim().split(/\s+/);
           const isDir = parts[0]?.startsWith("d") ?? false;
           const name = parts.slice(8).join(" ");
           return { name, isDir };
-        }).filter(i => i.name);
+        }).filter((i: { name: string; isDir: boolean }) => i.name);
         return { items };
       }
       const { readdir, stat } = await import("node:fs/promises");
