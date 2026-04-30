@@ -28,7 +28,9 @@
     { "path": "packages/mcp" },
     { "path": "packages/sandbox" },
     { "path": "packages/router" },
-    { "path": "packages/sysadmin" }
+    { "path": "packages/sysadmin" },
+    { "path": "packages/vision" },
+    { "path": "packages/social" }
   ],
   "files": []
 }

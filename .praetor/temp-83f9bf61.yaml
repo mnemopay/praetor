@@ -1,0 +1,10 @@
+name: Dash Mission 83f9bf61
+goal: |
+  Store this profile in your knowledge base and then generate a competitive SEO outreach sequence for BizSuite."
+budget:
+  maxUsd: 5.00
+  approvalThresholdUsd: 0.00
+agents:
+  - role: developer
+outputs:
+  - result

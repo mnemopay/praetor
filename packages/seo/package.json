@@ -2,7 +2,15 @@
   "name": "@praetor/seo",
   "version": "0.1.0",
   "description": "Praetor GEO/SEO pack — sitemap, robots, ai.txt, llms.txt, ai:description, og/twitter, JSON-LD (Article/FAQ/Breadcrumb/Org), hreflang, RSS, opensearch, security.txt, humans.txt.",
-  "keywords": ["seo", "geo", "llms.txt", "json-ld", "sitemap", "robots", "praetor"],
+  "keywords": [
+    "seo",
+    "geo",
+    "llms.txt",
+    "json-ld",
+    "sitemap",
+    "robots",
+    "praetor"
+  ],
   "homepage": "https://praetor.mnemopay.com",
   "repository": {
     "type": "git",
@@ -19,12 +27,21 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
-  "engines": { "node": ">=20" },
-  "publishConfig": { "access": "public" }
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Jerry <jerry@getbizsuite.com>"
 }

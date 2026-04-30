@@ -1,0 +1,10 @@
+name: Dash Mission 9df3ff06
+goal: |
+  scrape getbizsuite.com
+budget:
+  maxUsd: 5.00
+  approvalThresholdUsd: 0.00
+agents:
+  - role: developer
+outputs:
+  - result

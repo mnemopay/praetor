@@ -2,7 +2,17 @@
   "name": "@praetor/ugc",
   "version": "0.1.0",
   "description": "Praetor UGC pipeline — portrait → motion → voiceover → composite. OpenAI gpt-image-1, Luma Dream Machine, Replicate (Seedance/Nano-Banana), Hedra Character-3 lipsync, Azure Neural TTS, ffmpeg compositor.",
-  "keywords": ["ugc", "ai-video", "lipsync", "hedra", "luma", "openai", "azure-tts", "ffmpeg", "praetor"],
+  "keywords": [
+    "ugc",
+    "ai-video",
+    "lipsync",
+    "hedra",
+    "luma",
+    "openai",
+    "azure-tts",
+    "ffmpeg",
+    "praetor"
+  ],
   "homepage": "https://praetor.mnemopay.com",
   "repository": {
     "type": "git",
@@ -19,12 +29,21 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
-  "engines": { "node": ">=20" },
-  "publishConfig": { "access": "public" }
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Jerry <jerry@getbizsuite.com>"
 }

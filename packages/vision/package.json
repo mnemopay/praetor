@@ -1,7 +1,7 @@
 {
-  "name": "@praetor/payments",
-  "version": "0.0.1",
-  "private": true,
+  "name": "@praetor/vision",
+  "version": "0.1.0",
+  "description": "Praetor Vision Tools",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -10,15 +10,20 @@
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
-  "peerDependencies": {
-    "@mnemopay/sdk": "^1.4.2"
+  "dependencies": {
+    "@praetor/tools": "*",
+    "screenshot-desktop": "^1.15.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.7.0"
   },
   "author": "Jerry <jerry@getbizsuite.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/JerryOmiagbo/praetor.git",
-    "directory": "packages/payments"
+    "directory": "packages/vision"
   },
   "publishConfig": {
     "access": "public"

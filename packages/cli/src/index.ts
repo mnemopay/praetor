@@ -21,6 +21,8 @@ import { DesignPack, type HtmlInCanvas3DSpec, type SplinePresetId } from "@praet
 import { renderSite, submitIndexNow, extractGeoProfile, analyzeContentSeo, generateOutreachSequence, generateOgImageUrl, type SiteManifest } from "@praetor/seo";
 import { defaultBusinessOps, auditedBusinessOps, type AuditSink } from "@praetor/business-ops";
 import { runCommand, readFile, writeFile, listDir } from "@praetor/sysadmin";
+import { capture_screen, analyze_image } from "@praetor/vision";
+import { post_x_tweet, post_tiktok_video, schedule_cron_job } from "@praetor/social";
 import { defaultRenderer } from "@praetor/game-assets";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -615,6 +617,15 @@ function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
       return { success: true, items: res.items };
     }
   );
+
+  // Vision
+  reg.register({ name: capture_screen.name, description: capture_screen.description, schema: capture_screen.parameters as any }, capture_screen.execute);
+  reg.register({ name: analyze_image.name, description: analyze_image.description, schema: analyze_image.parameters as any }, analyze_image.execute);
+
+  // Social
+  reg.register({ name: post_x_tweet.name, description: post_x_tweet.description, schema: post_x_tweet.parameters as any }, post_x_tweet.execute);
+  reg.register({ name: post_tiktok_video.name, description: post_tiktok_video.description, schema: post_tiktok_video.parameters as any }, post_tiktok_video.execute);
+  reg.register({ name: schedule_cron_job.name, description: schedule_cron_job.description, schema: schedule_cron_job.parameters as any }, schedule_cron_job.execute);
 
   return reg;
 }

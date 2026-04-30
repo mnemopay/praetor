@@ -19,5 +19,15 @@
   "dependencies": {
     "dompurify": "^3.4.1",
     "marked": "^18.0.2"
+  },
+  "author": "Jerry <jerry@getbizsuite.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JerryOmiagbo/praetor.git",
+    "directory": "packages/dashboard"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

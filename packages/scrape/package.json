@@ -2,7 +2,14 @@
   "name": "@praetor/scrape",
   "version": "0.1.0",
   "description": "Praetor scrape pack — Crawl4AI-style HTML, sitemap walker, JSON-LD extractor, X.com syndication endpoint, robots-aware. Firecrawl available as paid tier.",
-  "keywords": ["scrape", "crawl", "json-ld", "sitemap", "x.com", "praetor"],
+  "keywords": [
+    "scrape",
+    "crawl",
+    "json-ld",
+    "sitemap",
+    "x.com",
+    "praetor"
+  ],
   "homepage": "https://praetor.mnemopay.com",
   "repository": {
     "type": "git",
@@ -19,12 +26,21 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
-  "engines": { "node": ">=20" },
-  "publishConfig": { "access": "public" }
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Jerry <jerry@getbizsuite.com>"
 }

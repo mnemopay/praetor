@@ -5,8 +5,33 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "scripts": { "build": "tsc -b" },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
   "dependencies": {
     "@praetor/router": "*"
+  },
+  "author": "Jerry <jerry@getbizsuite.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JerryOmiagbo/praetor.git",
+    "directory": "packages/agents"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   }
 }
