@@ -13,8 +13,9 @@ export interface MissionResult {
 export interface MissionContext {
   charter: Charter;
   payments: { reserve: (usd: number) => Promise<{ holdId: string }>; settle: (holdId: string, usd: number) => Promise<void> };
-  agents: { run: (charter: Charter) => Promise<{ outputs: string[]; spentUsd: number }> };
+  agents: { run: (charter: Charter, signal?: AbortSignal) => Promise<{ outputs: string[]; spentUsd: number }> };
   audit: { record: (event: string, data: Record<string, unknown>) => void; finalize: () => string };
+  signal?: AbortSignal;
 }
 
 export async function runMission(ctx: MissionContext): Promise<MissionResult> {
@@ -23,8 +24,9 @@ export async function runMission(ctx: MissionContext): Promise<MissionResult> {
   const hold = await ctx.payments.reserve(ctx.charter.budget.maxUsd);
   ctx.audit.record("budget.reserved", { holdId: hold.holdId, maxUsd: ctx.charter.budget.maxUsd });
   let result;
+  if (ctx.signal?.aborted) throw new Error("Mission aborted");
   try {
-    result = await ctx.agents.run(ctx.charter);
+    result = await ctx.agents.run(ctx.charter, ctx.signal);
   } catch (e) {
     ctx.audit.record("mission.error", { error: (e as Error).message });
     return {

@@ -8,6 +8,7 @@ import {
   runMission,
   MerkleAudit,
   buildArticle12Bundle,
+  PolicyEngine,
   type Charter,
   type MissionResult,
 } from "@praetor/core";
@@ -20,7 +21,8 @@ import { DEFAULT_CATALOGUE, LlmRouter, registerDefaultProviders, type RouteRequi
 import { DesignPack, type HtmlInCanvas3DSpec, type SplinePresetId } from "@praetor/design";
 import { renderSite, submitIndexNow, extractGeoProfile, analyzeContentSeo, generateOutreachSequence, generateOgImageUrl, type SiteManifest } from "@praetor/seo";
 import { defaultBusinessOps, auditedBusinessOps, type AuditSink } from "@praetor/business-ops";
-import { runCommand, readFile, writeFile, listDir } from "@praetor/sysadmin";
+import { SysadminModule } from "@praetor/sysadmin";
+import { SandboxDispatcher, MockSandboxFactory } from "@praetor/sandbox";
 import { capture_screen, analyze_image } from "@praetor/vision";
 import { post_x_tweet, post_tiktok_video, schedule_cron_job } from "@praetor/social";
 import { defaultRenderer } from "@praetor/game-assets";
@@ -113,7 +115,11 @@ function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAud
     }
   };
 
-  return new NativePraetorEngine(router, registry, { fiscal, audit }, route);
+  const policy = new PolicyEngine([
+    { tool: "*", action: "allow" } // Default allow for now, users can restrict via charter later
+  ]);
+
+  return new NativePraetorEngine(router, registry, { fiscal, audit }, policy, route);
 }
 
 function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
@@ -126,6 +132,10 @@ function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
   const ops = audit ? auditedBusinessOps(rawOps, audit) : rawOps;
   const scraper = defaultScraper(process.env);
   const games = defaultRenderer({ outDir: join(outDir, "games") });
+
+  // In real implementation this would use charter.sandbox.kind
+  // For now we instantiate the MockSandbox by default if not native
+  const sysadmin = new SysadminModule(); // Using native fallback until async sandbox init is wired in runMission
 
   reg.register(
     {
@@ -552,7 +562,7 @@ function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
       tags: ["sysadmin", "os", "terminal", "execute"]
     },
     async ({ command, cwd }) => {
-      const res = await runCommand(command as string, cwd as string | undefined);
+      const res = await sysadmin.runCommand(command as string, cwd as string | undefined);
       return { success: res.exitCode === 0, stdout: res.stdout, stderr: res.stderr, exitCode: res.exitCode };
     }
   );
@@ -571,7 +581,7 @@ function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
       tags: ["sysadmin", "os", "file", "read"]
     },
     async ({ path }) => {
-      const res = await readFile(path as string);
+      const res = await sysadmin.readFile(path as string);
       if (res.error) return { success: false, error: res.error };
       return { success: true, content: res.content };
     }
@@ -592,7 +602,7 @@ function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
       tags: ["sysadmin", "os", "file", "write"]
     },
     async ({ path, content }) => {
-      const res = await writeFile(path as string, content as string);
+      const res = await sysadmin.writeFile(path as string, content as string);
       if (res.error) return { success: false, error: res.error };
       return { success: true };
     }
@@ -612,7 +622,7 @@ function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
       tags: ["sysadmin", "os", "file", "list"]
     },
     async ({ path }) => {
-      const res = await listDir(path as string);
+      const res = await sysadmin.listDir(path as string);
       if (res.error) return { success: false, error: res.error };
       return { success: true, items: res.items };
     }
@@ -694,7 +704,7 @@ async function cmdRun(args: string[]) {
   const result = await runMission({
     charter,
     payments,
-    agents: { run: async (c) => agent.run({ goal: c.goal, outputs: c.outputs, budgetUsd: c.budget.maxUsd }) },
+    agents: { run: async (c, signal) => agent.run({ goal: c.goal, outputs: c.outputs, budgetUsd: c.budget.maxUsd, steps: c.steps, signal }) },
     audit,
   });
 

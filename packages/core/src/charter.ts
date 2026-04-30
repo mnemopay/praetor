@@ -9,9 +9,16 @@ export interface CharterAgent {
   skills?: string[];
 }
 
+export interface CharterStep {
+  action: string;
+  args?: Record<string, unknown>;
+}
+
 export interface Charter {
   name: string;
   goal: string;
+  steps?: CharterStep[];
+  sandbox?: { kind: "mock" | "e2b" | "firecracker-self-hosted" };
   budget: CharterBudget;
   agents: CharterAgent[];
   outputs: string[];
