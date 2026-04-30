@@ -2,5 +2,9 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": { "rootDir": "src", "outDir": "dist", "composite": true },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../router" }]
+  "references": [
+    { "path": "../core" },
+    { "path": "../tools" },
+    { "path": "../router" }
+  ]
 }
