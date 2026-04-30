@@ -11,7 +11,7 @@ import {
   type Charter,
   type MissionResult,
 } from "@praetor/core";
-import { MockPayments, type PaymentsAdapter } from "@praetor/payments";
+import { MockPayments, MnemoPayAdapter, type PaymentsAdapter, type MnemoPayClient } from "@praetor/payments";
 import { EchoAgent, LlmAgent, NativePraetorEngine, type AgentAdapter } from "@praetor/agents";
 import { defaultRegistry, type FiscalGate } from "@praetor/tools";
 import { defaultScraper, type ScrapeBackend } from "@praetor/scrape";
@@ -39,7 +39,38 @@ function loadDotenv(...candidates: string[]): void {
   }
 }
 
-function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAudit): AgentAdapter {
+class LiveMnemoPayClient implements MnemoPayClient {
+  constructor(private apiKey: string, private baseUrl: string = "https://api.mnemopay.com") {}
+
+  private async post(path: string, body: unknown) {
+    const res = await fetch(`${this.baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "authorization": `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`MnemoPay ${path} ${res.status}: ${text.slice(0, 200)}`);
+    }
+    return res.json();
+  }
+
+  async chargeRequest(args: { amount: number; description: string }) {
+    const r = await this.post("/v1/chargeRequest", args) as { id: string };
+    return { id: r.id };
+  }
+  async settle(id: string, amount: number) {
+    await this.post("/v1/settle", { id, amount });
+  }
+  async refund(id: string) {
+    await this.post("/v1/refund", { id });
+  }
+}
+
+function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAudit, registry = defaultRegistry()): AgentAdapter {
   const env = process.env;
   const haveAny = env.ANTHROPIC_API_KEY || env.OPENAI_API_KEY || env.OPENROUTER_API_KEY;
   if (!haveAny) return new EchoAgent();
@@ -76,6 +107,60 @@ function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAud
   };
 
   return new NativePraetorEngine(router, defaultRegistry(), { fiscal, audit }, route);
+}
+
+function buildRegistryWithKnowledge(missionId: string) {
+  const reg = defaultRegistry();
+  const kb = defaultKnowledgeBase({ missionId });
+
+  reg.register(
+    {
+      name: "search_knowledge",
+      description: "Search the agent's persistent memory (Knowledge Base) for context.",
+      schema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "The search query." },
+          limit: { type: "integer", description: "Max results to return (default 5)." },
+        },
+        required: ["query"],
+      },
+      tags: ["memory", "search"],
+    },
+    async ({ query, limit }) => {
+      const hits = await kb.query(query as string, (limit as number) ?? 5);
+      return { hits };
+    }
+  );
+
+  reg.register(
+    {
+      name: "ingest_knowledge",
+      description: "Save important text or context into the agent's persistent memory.",
+      schema: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "The text to remember." },
+          source: { type: "string", description: "Where the text came from (e.g. url, user input)." },
+        },
+        required: ["text"],
+      },
+      tags: ["memory", "ingest"],
+    },
+    async ({ text, source }) => {
+      const t = text as string;
+      const chunks = chunkText(t, 1200).map((piece, i) => ({
+        id: `${Date.now()}-${i}`,
+        text: piece,
+        source: (source as string) ?? "agent",
+        metadata: { tier: "semantic" as const },
+      }));
+      const r = await kb.ingest(chunks);
+      return { ingested: r.ingested };
+    }
+  );
+
+  return reg;
 }
 
 function parseYaml(src: string): unknown {
@@ -124,8 +209,20 @@ async function cmdRun(args: string[]) {
       process.stderr.write(JSON.stringify({ i: index, ts: event.ts, type: event.type, chain: chainHash.slice(0, 12), data: event.data }) + "\n");
     });
   }
-  const payments = new MockPayments();
-  const agent = pickAgent(charter, payments, audit);
+  
+  let payments: PaymentsAdapter;
+  const mnemoKey = process.env.MNEMOPAY_API_KEY;
+  if (mnemoKey) {
+    if (verbose) process.stderr.write("[praetor] using live MnemoPay fiscal gate\\n");
+    const baseUrl = process.env.MNEMOPAY_BASE_URL || "https://api.mnemopay.com";
+    payments = new MnemoPayAdapter(new LiveMnemoPayClient(mnemoKey, baseUrl));
+  } else {
+    if (verbose) process.stderr.write("[praetor] using MockPayments fiscal gate (no MNEMOPAY_API_KEY)\\n");
+    payments = new MockPayments();
+  }
+
+  const registry = buildRegistryWithKnowledge(charter.name);
+  const agent = pickAgent(charter, payments, audit, registry);
   if (verbose) process.stderr.write(JSON.stringify({ agent: agent.name }) + "\n");
   const result = await runMission({
     charter,
