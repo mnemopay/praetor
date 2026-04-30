@@ -19,6 +19,7 @@ export interface Charter {
   goal: string;
   steps?: CharterStep[];
   sandbox?: { kind: "mock" | "e2b" | "firecracker-self-hosted" };
+  plugins?: string[];
   budget: CharterBudget;
   agents: CharterAgent[];
   outputs: string[];

@@ -29,6 +29,8 @@ export interface ToolDefinition {
   costUsd?: number;
   /** Tags help charters discover tools — e.g. ["weather", "free", "no-auth"]. */
   tags?: readonly string[];
+  /** Roles that are allowed to execute this tool. If empty, all roles can. */
+  allowedRoles?: readonly string[];
 }
 
 export type ToolHandler<I = Record<string, unknown>, O = unknown> = (input: I) => Promise<O>;
@@ -68,8 +70,10 @@ export class ToolRegistry {
     return this.tools.get(name)?.def;
   }
 
-  list(): ToolDefinition[] {
-    return [...this.tools.values()].map((t) => t.def);
+  list(role?: string): ToolDefinition[] {
+    const all = [...this.tools.values()].map((t) => t.def);
+    if (!role) return all;
+    return all.filter(t => !t.allowedRoles || t.allowedRoles.length === 0 || t.allowedRoles.includes(role));
   }
 
   search(query: string): ToolDefinition[] {

@@ -30,7 +30,8 @@
     { "path": "packages/router" },
     { "path": "packages/sysadmin" },
     { "path": "packages/vision" },
-    { "path": "packages/social" }
+    { "path": "packages/social" },
+    { "path": "packages/sdk" }
   ],
   "files": []
 }

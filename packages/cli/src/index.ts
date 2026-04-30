@@ -13,7 +13,7 @@ import {
   type MissionResult,
 } from "@praetor/core";
 import { MockPayments, MnemoPayAdapter, type PaymentsAdapter, type MnemoPayClient } from "@praetor/payments";
-import { EchoAgent, LlmAgent, NativePraetorEngine, type AgentAdapter } from "@praetor/agents";
+import { EchoAgent, LlmAgent, NativePraetorEngine, CoordinatorAgent, type AgentAdapter } from "@praetor/agents";
 import { defaultRegistry, type FiscalGate } from "@praetor/tools";
 import { defaultScraper, type ScrapeBackend } from "@praetor/scrape";
 import { chunkText, defaultKnowledgeBase } from "@praetor/knowledge";
@@ -119,10 +119,10 @@ function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAud
     { tool: "*", action: "allow" } // Default allow for now, users can restrict via charter later
   ]);
 
-  return new NativePraetorEngine(router, registry, { fiscal, audit }, policy, route);
+  return new CoordinatorAgent(router, registry, { fiscal, audit }, policy, route);
 }
 
-function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
+async function buildEnhancedRegistry(charter: Charter, missionId: string, audit?: AuditSink) {
   const reg = defaultRegistry();
   const kb = defaultKnowledgeBase({ missionId });
   const design = new DesignPack();
@@ -633,9 +633,27 @@ function buildEnhancedRegistry(missionId: string, audit?: AuditSink) {
   reg.register({ name: analyze_image.name, description: analyze_image.description, schema: analyze_image.parameters as any }, analyze_image.execute);
 
   // Social
-  reg.register({ name: post_x_tweet.name, description: post_x_tweet.description, schema: post_x_tweet.parameters as any }, post_x_tweet.execute);
-  reg.register({ name: post_tiktok_video.name, description: post_tiktok_video.description, schema: post_tiktok_video.parameters as any }, post_tiktok_video.execute);
-  reg.register({ name: schedule_cron_job.name, description: schedule_cron_job.description, schema: schedule_cron_job.parameters as any }, schedule_cron_job.execute);
+  reg.register({ name: post_x_tweet.name, description: post_x_tweet.description, schema: post_x_tweet.parameters as any, allowedRoles: ["marketer", "developer"] }, post_x_tweet.execute);
+  reg.register({ name: post_tiktok_video.name, description: post_tiktok_video.description, schema: post_tiktok_video.parameters as any, allowedRoles: ["marketer"] }, post_tiktok_video.execute);
+  reg.register({ name: schedule_cron_job.name, description: schedule_cron_job.description, schema: schedule_cron_job.parameters as any, allowedRoles: ["architect", "developer"] }, schedule_cron_job.execute);
+
+  // Dynamic Plugin Loading
+  if (charter.plugins && charter.plugins.length > 0) {
+    for (const pluginName of charter.plugins) {
+      try {
+        const plugin = await import(pluginName);
+        if (plugin.tools && Array.isArray(plugin.tools)) {
+          for (const t of plugin.tools) {
+             reg.register(t.def, t.execute);
+          }
+        } else if (plugin.default && typeof plugin.default === "function") {
+          plugin.default(reg);
+        }
+      } catch (err: any) {
+        console.warn(`Failed to load plugin ${pluginName}: ${err.message}`);
+      }
+    }
+  }
 
   return reg;
 }
@@ -698,13 +716,13 @@ async function cmdRun(args: string[]) {
     payments = new MockPayments();
   }
 
-  const registry = buildEnhancedRegistry(charter.name, audit);
+  const registry = await buildEnhancedRegistry(charter, charter.name, audit);
   const agent = pickAgent(charter, payments, audit, registry);
   if (verbose) process.stderr.write(JSON.stringify({ agent: agent.name }) + "\n");
   const result = await runMission({
     charter,
     payments,
-    agents: { run: async (c, signal) => agent.run({ goal: c.goal, outputs: c.outputs, budgetUsd: c.budget.maxUsd, steps: c.steps, signal }) },
+    agents: { run: async (c, signal) => agent.run({ goal: c.goal, outputs: c.outputs, budgetUsd: c.budget.maxUsd, steps: c.steps, agents: c.agents, signal }) },
     audit,
   });
 

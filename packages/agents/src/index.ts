@@ -4,6 +4,8 @@ export interface AgentRunInput {
   budgetUsd: number;
   steps?: { action: string; args?: Record<string, unknown> }[];
   signal?: AbortSignal;
+  agents?: import("@praetor/core").CharterAgent[];
+  role?: string;
 }
 
 export interface AgentRunResult {
@@ -73,7 +75,7 @@ export class NativePraetorEngine implements AgentAdapter {
       { role: "user", content: input.goal },
     ];
 
-    const availableTools = this.tools.list().map(t => ({
+    const availableTools = this.tools.list(input.role).map(t => ({
       type: "function" as const,
       function: {
         name: t.name,
@@ -173,3 +175,65 @@ export class LlmAgent implements AgentAdapter {
     };
   }
 }
+
+/**
+ * CoordinatorAgent — manages multiple sub-agents based on the charter.
+ */
+export class CoordinatorAgent implements AgentAdapter {
+  readonly name = "coordinator";
+  constructor(
+    private router: LlmRouter,
+    private tools: ToolRegistry,
+    private toolContext: ToolCallContext,
+    private policy?: PolicyEngine,
+    private route: RouteRequirements = { quality: "fast" }
+  ) {}
+
+  async run(input: AgentRunInput): Promise<AgentRunResult> {
+    if (!input.agents || input.agents.length === 0) {
+      // Fallback to native praetor if no agents specified
+      const engine = new NativePraetorEngine(this.router, this.tools, this.toolContext, this.policy, this.route);
+      return engine.run(input);
+    }
+
+    let spentUsd = 0;
+    const outputs = [...input.outputs];
+    let currentGoal = input.goal;
+
+    // Sequential coordination for now: each agent takes the goal and outputs of the previous
+    for (const agentDef of input.agents) {
+      if (input.signal?.aborted) throw new Error("Mission aborted");
+      
+      const systemPrompt = `You are a ${agentDef.role} agent. Your skills are: ${agentDef.skills?.join(", ")}. Accomplish your part of the goal.`;
+      
+      const subEngine = new NativePraetorEngine(
+        this.router, 
+        this.tools, 
+        this.toolContext, 
+        this.policy, 
+        this.route, 
+        systemPrompt
+      );
+
+      const subInput: AgentRunInput = {
+        ...input,
+        goal: currentGoal,
+        outputs,
+        budgetUsd: input.budgetUsd - spentUsd,
+        role: agentDef.role,
+        // Steps are only passed to the first agent or if explicitly mapped in the future
+        steps: undefined 
+      };
+
+      const result = await subEngine.run(subInput);
+      spentUsd += result.spentUsd;
+      
+      // The last output from the sub-agent becomes context for the next
+      outputs.push(`[${agentDef.role} completed]: ${result.outputs[0]}`);
+      currentGoal = `Previous agent output: ${result.outputs[0]}\n\nOriginal Goal: ${input.goal}`;
+    }
+
+    return { outputs, spentUsd };
+  }
+}
+
