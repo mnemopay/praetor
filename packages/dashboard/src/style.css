@@ -142,6 +142,36 @@ h1 {
   padding: 0.55rem 0.65rem;
 }
 
+.file-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #35415d;
+  background: #121b33;
+  color: #e6e9ef;
+  border-radius: 0.6rem;
+  padding: 0 0.6rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.file-btn:hover { background: #1a2542; }
+.file-btn input[type="file"] { display: none; }
+
+.staged-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.staged-file {
+  background: rgba(165,180,252,0.1);
+  border: 1px solid rgba(165,180,252,0.25);
+  color: #a5b4fc;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.4rem;
+  font-size: 0.8rem;
+}
+
 .cmd-row {
   display: flex;
   align-items: center;

@@ -52,8 +52,13 @@ app.innerHTML = `
       <h2>Talk to Praetor</h2>
       <p class="panel-subtitle">Type naturally. Replies come from OpenRouter (when key is set) plus runnable CLI commands.</p>
       <div id="chatLog" class="chat-log"></div>
+      <div id="stagedFiles" class="staged-files"></div>
       <form id="chatForm" class="chat-form">
-        <input id="chatInput" class="chat-input" type="text" placeholder="Example: ingest https://example.com and save mission output" />
+        <label class="file-btn" title="Upload files">
+          <input type="file" id="chatFile" multiple />
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+        </label>
+        <input id="chatInput" class="chat-input" type="text" placeholder="Example: describe this image, or run a mission" />
         <button class="refresh" type="submit">Send</button>
       </form>
     </section>
@@ -72,6 +77,8 @@ app.innerHTML = `
 const chatForm = document.querySelector<HTMLFormElement>("#chatForm");
 const chatInput = document.querySelector<HTMLInputElement>("#chatInput");
 const chatLog = document.querySelector<HTMLDivElement>("#chatLog");
+const chatFile = document.querySelector<HTMLInputElement>("#chatFile");
+const stagedFiles = document.querySelector<HTMLDivElement>("#stagedFiles");
 
 if (!chatForm || !chatInput || !chatLog) {
   throw new Error("dashboard: chat UI failed to initialize");
@@ -86,32 +93,92 @@ appendMessage("assistant", {
   meta: "LLM route: OpenRouter (if OPENROUTER_API_KEY is set)",
 });
 
+let selectedFiles: File[] = [];
+
+if (chatFile && stagedFiles) {
+  chatFile.addEventListener("change", () => {
+    if (chatFile.files) {
+      selectedFiles = Array.from(chatFile.files);
+      stagedFiles.innerHTML = selectedFiles.map(f => `<span class="staged-file">${f.name}</span>`).join("");
+    }
+  });
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(",")[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const prompt = chatInput.value.trim();
-  if (!prompt) return;
+  let prompt = chatInput.value.trim();
+  if (!prompt && selectedFiles.length === 0) return;
 
-  appendMessage("user", { text: prompt, commands: [] });
+  appendMessage("user", { text: prompt || "[Files attached]", commands: [] });
   chatInput.disabled = true;
+  if (chatFile) chatFile.disabled = true;
+
   const sendButton = chatForm.querySelector<HTMLButtonElement>("button[type='submit']");
   if (sendButton) {
     sendButton.disabled = true;
-    sendButton.textContent = "Thinking...";
+    sendButton.textContent = "Running Mission...";
   }
-  const llm = await askPraetor(prompt);
-  const commands = suggestCommands(prompt);
-  appendMessage("assistant", {
-    text: llm.text,
-    commands,
-    meta: llm.meta,
-  });
-  chatInput.value = "";
-  chatInput.disabled = false;
-  if (sendButton) {
-    sendButton.disabled = false;
-    sendButton.textContent = "Send";
+
+  try {
+    const uploadedPaths: string[] = [];
+    if (selectedFiles.length > 0) {
+      for (const file of selectedFiles) {
+        const base64 = await fileToBase64(file);
+        const res = await fetch(`${API_BASE}/api/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ filename: file.name, data: base64 }),
+        });
+        const payload = await res.json() as { ok: boolean; path?: string; error?: string };
+        if (payload.ok && payload.path) {
+          uploadedPaths.push(payload.path);
+        } else {
+          throw new Error(payload.error || "Upload failed");
+        }
+      }
+      prompt += "\\n\\nAttached files:\\n" + uploadedPaths.map(p => `- ${p}`).join("\\n");
+    }
+
+    const llm = await askPraetor(prompt);
+    const commands = suggestCommands(prompt);
+    appendMessage("assistant", {
+      text: llm.text,
+      commands,
+      meta: llm.meta,
+    });
+  } catch (error) {
+    appendMessage("assistant", {
+      text: `Error executing mission: ${String(error)}`,
+      commands: [],
+    });
+  } finally {
+    chatInput.value = "";
+    selectedFiles = [];
+    if (stagedFiles) stagedFiles.innerHTML = "";
+    if (chatFile) {
+      chatFile.value = "";
+      chatFile.disabled = false;
+    }
+    chatInput.disabled = false;
+    if (sendButton) {
+      sendButton.disabled = false;
+      sendButton.textContent = "Send";
+    }
+    chatInput.focus();
   }
-  chatInput.focus();
 });
 
 function suggestCommands(prompt: string): string[] {
@@ -213,7 +280,7 @@ function appendMessage(role: "user" | "assistant", reply: ChatReply): void {
 
 async function askPraetor(prompt: string): Promise<{ text: string; meta: string }> {
   try {
-    const res = await fetch(`${API_BASE}/api/chat`, {
+    const res = await fetch(`${API_BASE}/api/praetor`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt }),
@@ -224,16 +291,17 @@ async function askPraetor(prompt: string): Promise<{ text: string; meta: string 
       model?: string;
       provider?: string;
       error?: string;
+      exitCode?: number;
     };
     if (!payload.ok) {
       return {
-        text: `LLM chat unavailable: ${payload.error ?? "unknown error"}. I can still suggest commands below.`,
-        meta: "Fallback mode (no LLM response)",
+        text: `Praetor mission failed: ${payload.error ?? "unknown error"}.`,
+        meta: "Engine error",
       };
     }
     return {
-      text: payload.text?.trim() || "No response text returned.",
-      meta: `Routed via ${payload.provider ?? "provider"} model: ${payload.model ?? "unknown"}`,
+      text: payload.text?.trim() || "Mission completed with no output.",
+      meta: `Executed via ${payload.model ?? "Praetor Engine"} (Exit ${payload.exitCode ?? 0})`,
     };
   } catch (error) {
     return {

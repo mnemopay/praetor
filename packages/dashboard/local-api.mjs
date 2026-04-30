@@ -1,7 +1,9 @@
 import { createServer } from "node:http";
 import { exec } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { mkdir, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "..", "..");
@@ -48,7 +50,40 @@ const server = createServer(async (req, res) => {
     });
     return;
   }
-  if (req.method === "POST" && req.url === "/api/chat") {
+  if (req.method === "POST" && req.url === "/api/upload") {
+    const body = await readBody(req);
+    let payload;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      json(res, 400, { ok: false, error: "Invalid JSON" });
+      return;
+    }
+    const { filename, data } = payload;
+    if (!filename || !data) {
+      json(res, 400, { ok: false, error: "filename and data (base64) are required" });
+      return;
+    }
+
+    try {
+      const uploadDir = resolve(repoRoot, ".praetor", "uploads");
+      await mkdir(uploadDir, { recursive: true });
+      const safeName = filename.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const id = randomBytes(4).toString("hex");
+      const finalName = `${id}-${safeName}`;
+      const filePath = join(uploadDir, finalName);
+      
+      const buffer = Buffer.from(data, "base64");
+      await writeFile(filePath, buffer);
+      
+      json(res, 200, { ok: true, path: filePath });
+    } catch (error) {
+      json(res, 500, { ok: false, error: error.message });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/api/praetor") {
     const body = await readBody(req);
     let payload;
     try {
@@ -62,27 +97,41 @@ const server = createServer(async (req, res) => {
       json(res, 400, { ok: false, error: "prompt is required" });
       return;
     }
-    const apiKey = process.env.OPENROUTER_API_KEY ?? "";
-    if (!apiKey) {
-      json(res, 400, {
-        ok: false,
-        error: "OPENROUTER_API_KEY not set in the API terminal environment.",
-      });
-      return;
-    }
+
     try {
-      const routedModel = process.env.PRAETOR_DASH_MODEL || process.env.OPENROUTER_MODEL || "openrouter/auto";
-      const reply = await chatOpenRouter(prompt, apiKey, routedModel);
-      json(res, 200, {
-        ok: true,
-        text: reply.text,
-        model: reply.model,
-        provider: "openrouter",
+      const missionDir = resolve(repoRoot, ".praetor");
+      await mkdir(missionDir, { recursive: true });
+      const id = randomBytes(4).toString("hex");
+      const charterPath = join(missionDir, `temp-${id}.yaml`);
+      
+      const charterContent = `
+name: Dash Mission ${id}
+goal: |
+  ${prompt.replace(/\n/g, "\n  ")}
+budget:
+  maxUsd: 5.00
+  approvalThresholdUsd: 0.00
+agents:
+  - role: developer
+outputs:
+  - result
+`.trim();
+
+      await writeFile(charterPath, charterContent);
+
+      exec(\`npx praetor run \${charterPath}\`, { cwd: repoRoot, timeout: 300000, maxBuffer: 5 * 1024 * 1024 }, (error, stdout, stderr) => {
+        json(res, 200, {
+          ok: true,
+          text: (stdout + "\\n" + stderr).trim(),
+          model: "NativePraetorEngine",
+          provider: "praetor",
+          exitCode: error?.code ?? 0
+        });
       });
     } catch (error) {
       json(res, 500, {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: error.message,
       });
     }
     return;
