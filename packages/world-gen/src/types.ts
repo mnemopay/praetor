@@ -125,3 +125,19 @@ export interface WorldGenAuditEvent {
 }
 
 export type AuditHook = (event: WorldGenAuditEvent) => void;
+
+/* ---------- activity bus (optional) ---------- */
+
+/**
+ * Structural subset of `@praetor/core`'s `ActivityBus`. Defined locally so
+ * world-gen does not depend on core. The runtime passes the real bus from
+ * `@praetor/core` and the shapes match.
+ */
+export type WorldGenActivityEvent =
+  | { kind: "tool.start"; missionId: string; eventId: string; toolName: string; args: unknown; ts: string }
+  | { kind: "tool.progress"; missionId: string; eventId: string; pct?: number; status: string; ts: string }
+  | { kind: "tool.end"; missionId: string; eventId: string; ok: boolean; result?: unknown; costUsd?: number; ts: string };
+
+export interface WorldGenActivityBus {
+  publish(e: WorldGenActivityEvent): void;
+}

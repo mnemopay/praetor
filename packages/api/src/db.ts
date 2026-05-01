@@ -1,4 +1,5 @@
 import type { MissionRecord } from "./types.js";
+import type { ActivityEvent } from "@praetor/core";
 import { supabaseAdmin } from "./supabase.js";
 
 export async function createMissionRow(input: {
@@ -81,4 +82,45 @@ export async function listInstalledPlugins(userId: string): Promise<string[]> {
 export async function installPlugin(userId: string, pluginName: string): Promise<void> {
   const { error } = await supabaseAdmin().from("plugin_installs").insert({ user_id: userId, plugin_name: pluginName });
   if (error && error.code !== "23505") throw error;
+}
+
+/* ─── Activity events (Phase E) ───────────────────────────────────────── */
+
+export async function recordActivityEvent(userId: string, e: ActivityEvent): Promise<void> {
+  const row = {
+    user_id: userId,
+    mission_id: e.missionId,
+    kind: e.kind,
+    payload: e as unknown as Record<string, unknown>,
+    ts: e.ts,
+  };
+  const { error } = await supabaseAdmin().from("activity_events").insert(row);
+  if (error) throw error;
+}
+
+export async function getRecentActivity(
+  userId: string,
+  missionId: string,
+  limit = 50,
+): Promise<ActivityEvent[]> {
+  const { data, error } = await supabaseAdmin()
+    .from("activity_events")
+    .select("payload")
+    .eq("user_id", userId)
+    .eq("mission_id", missionId)
+    .order("ts", { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []).map((row) => (row as { payload: ActivityEvent }).payload);
+}
+
+/** Resolve mission owner; used by the activity bus persistence subscriber. */
+export async function getMissionOwner(missionId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin()
+    .from("missions")
+    .select("user_id")
+    .eq("id", missionId)
+    .maybeSingle();
+  if (error) return null;
+  return (data as { user_id?: string } | null)?.user_id ?? null;
 }

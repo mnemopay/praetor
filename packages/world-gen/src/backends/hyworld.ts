@@ -46,6 +46,8 @@ export class HyWorldBackend implements WorldBackend {
       glbUrl: pickUrl(r, ["glb_url", "mesh_url", "model_url", "output", "url"]),
       thumbUrl: typeof r.thumb_url === "string" ? r.thumb_url : undefined,
       durationMs: Date.now() - started,
+      // Self-hosted: no vendor charge.
+      costUsd: 0,
       raw: r,
     };
   }

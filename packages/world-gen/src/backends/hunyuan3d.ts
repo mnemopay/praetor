@@ -50,6 +50,8 @@ export class Hunyuan3dBackend implements ModelBackend {
         glbUrl: pickUrl(r, ["glb_url", "model_url", "output", "url"]),
         thumbUrl: typeof r.thumb_url === "string" ? r.thumb_url : undefined,
         durationMs: Date.now() - started,
+        // Self-hosted: no vendor charge.
+        costUsd: 0,
         raw: r,
       };
     }
@@ -117,6 +119,8 @@ export class Hunyuan3dBackend implements ModelBackend {
       glbUrl,
       thumbUrl: r.preview_url ?? r.rendered_image?.url,
       durationMs: Date.now() - started,
+      // fal-ai/hunyuan3d-v3 baseline as of 2026-05.
+      costUsd: 0.20,
       raw: r,
     };
   }

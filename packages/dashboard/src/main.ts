@@ -2,6 +2,8 @@ import "./style.css";
 import { createClient, type Session } from "@supabase/supabase-js";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import { ActivityPanel, type ActivityEvent } from "./components/ActivityPanel.js";
+import { openActivityStream, type ActivityStreamHandle } from "./eventStream.js";
 
 type Route = "chat" | "missions" | "audit" | "billing" | "marketplace" | "world";
 type Mission = { id: string; status: string; goal: string; created_at: string };
@@ -15,6 +17,7 @@ type WorldScene = {
   viewerPath: string;
 };
 type ChatMessage = { id: string; role: "user" | "praetor" | "system"; content: string; missionId?: string; status?: string };
+type AgentChoice = "native" | "coding" | "research" | "world-gen";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8788").replace(/\/$/, "");
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? "";
@@ -31,6 +34,10 @@ let currentRoute: Route = "chat";
 let selectedMissionId: string | null = null;
 let chatLog: ChatMessage[] = [];
 const pollers = new Map<string, number>();
+let activityPanel: ActivityPanel | null = null;
+let activityStream: ActivityStreamHandle | null = null;
+let activityMissionId: string | null = null;
+let selectedAgent: AgentChoice = "native";
 
 void bootstrap();
 
@@ -49,6 +56,9 @@ async function bootstrap() {
       selectedMissionId = null;
       chatLog = [];
       stopAllPollers();
+      activityStream?.close();
+      activityStream = null;
+      activityMissionId = null;
     }
     render();
   });
@@ -231,13 +241,32 @@ function renderChat() {
   const view = document.getElementById("view");
   if (!view) return;
   view.innerHTML = `
-    <div class="chat-shell">
-      <div class="chat-stream" id="chatStream">${renderChatMessages()}</div>
-      <form id="chatForm" class="chat-form">
-        <textarea id="chatInput" class="chat-input" rows="2" placeholder="Tell Praetor what to do — e.g. 'Generate an SEO audit for example.com and email it to me'"></textarea>
-        <button class="btn-primary" type="submit" id="chatSubmit">Run mission</button>
-      </form>
-      <p class="card-hint">Each prompt becomes a charter. Praetor streams logs back here as the mission executes.</p>
+    <div class="chat-split">
+      <div class="chat-shell">
+        <div class="chat-toolbar">
+          <label class="agent-picker-label" for="agentPicker">Agent</label>
+          <select id="agentPicker" class="agent-picker">
+            <option value="native">native</option>
+            <option value="coding">coding</option>
+            <option value="research">research</option>
+            <option value="world-gen">world-gen</option>
+          </select>
+          <button class="btn-secondary activity-toggle" id="activityToggle" type="button">Activity</button>
+        </div>
+        <div class="chat-stream" id="chatStream">${renderChatMessages()}</div>
+        <form id="chatForm" class="chat-form">
+          <textarea id="chatInput" class="chat-input" rows="2" placeholder="Tell Praetor what to do — e.g. 'Generate an SEO audit for example.com and email it to me'"></textarea>
+          <button class="btn-primary" type="submit" id="chatSubmit">Run mission</button>
+        </form>
+        <p class="card-hint">Each prompt becomes a charter. Praetor streams logs back here as the mission executes.</p>
+      </div>
+      <aside class="activity-pane" id="activityPane">
+        <header class="activity-pane-head">
+          <span class="card-label">Live activity</span>
+          <button class="btn-secondary activity-close" id="activityClose" type="button" aria-label="Close activity">×</button>
+        </header>
+        <div class="activity-list" id="activityList"></div>
+      </aside>
     </div>
   `;
   const stream = document.getElementById("chatStream");
@@ -245,6 +274,30 @@ function renderChat() {
   const form = document.getElementById("chatForm") as HTMLFormElement | null;
   const input = document.getElementById("chatInput") as HTMLTextAreaElement | null;
   const submitBtn = document.getElementById("chatSubmit") as HTMLButtonElement | null;
+  const agentPicker = document.getElementById("agentPicker") as HTMLSelectElement | null;
+  if (agentPicker) {
+    agentPicker.value = selectedAgent;
+    agentPicker.addEventListener("change", () => {
+      selectedAgent = (agentPicker.value as AgentChoice);
+    });
+  }
+
+  // Activity panel mount + slide-out toggle for narrow viewports.
+  const activityHost = document.getElementById("activityList");
+  if (activityHost) {
+    activityPanel = new ActivityPanel(activityHost);
+  }
+  const pane = document.getElementById("activityPane");
+  document.getElementById("activityToggle")?.addEventListener("click", () => {
+    pane?.classList.toggle("activity-open");
+  });
+  document.getElementById("activityClose")?.addEventListener("click", () => {
+    pane?.classList.remove("activity-open");
+  });
+
+  // If a mission is already selected, hydrate panel + open SSE.
+  if (selectedMissionId) attachActivity(selectedMissionId);
+
   input?.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
@@ -262,7 +315,7 @@ function renderChat() {
     try {
       const res = await authedFetch("/api/v1/missions", {
         method: "POST",
-        body: JSON.stringify({ goal }),
+        body: JSON.stringify({ goal, agent: selectedAgent }),
       });
       const payload = await res.json();
       if (!res.ok || !payload.missionId) {
@@ -277,12 +330,33 @@ function renderChat() {
         };
         chatLog.push(placeholder);
         watchMission(placeholder.id, payload.missionId);
+        attachActivity(payload.missionId);
       }
     } catch (err) {
       chatLog.push({ id: cryptoId(), role: "system", content: `Network error: ${(err as Error).message}` });
     }
     refreshChat();
     if (submitBtn) submitBtn.disabled = false;
+  });
+}
+
+/** Subscribe the activity panel to a mission: hydrate from history then open SSE. */
+function attachActivity(missionId: string): void {
+  if (!session || !activityPanel) return;
+  if (activityMissionId === missionId && activityStream) return;
+  // Tear down previous stream if mission changed.
+  activityStream?.close();
+  activityStream = null;
+  activityMissionId = missionId;
+  activityPanel.reset();
+
+  // Backfill last 50 events via the standard mission endpoint? The backend
+  // backlog is sent by the SSE route on connect, so we just open the stream.
+  activityStream = openActivityStream({
+    apiBase: API_BASE,
+    token: session.access_token,
+    missionId,
+    onEvent: (e) => activityPanel?.push(e as ActivityEvent),
   });
 }
 

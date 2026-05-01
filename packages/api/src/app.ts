@@ -7,6 +7,7 @@ import {
   createMissionRow,
   getMissionForUser,
   getMissionLogs,
+  getMissionOwner,
   installPlugin,
   listInstalledPlugins,
   listMissions,
@@ -14,6 +15,8 @@ import {
 import { env } from "./env.js";
 import { getPluginRegistry, validatePluginName } from "./marketplace.js";
 import { newMissionId, startMissionRun } from "./runner.js";
+import { mountActivityPersistence } from "./activity.js";
+import { createActivityRouter } from "./routes/activity.js";
 
 export function createApp() {
   const app = express();
@@ -47,6 +50,11 @@ export function createApp() {
     res.json({ ok: true, user: req.user });
   });
 
+  // SSE activity routes — must mount BEFORE the global auth middleware so
+  // the per-route query-token auth path can run.
+  mountActivityPersistence(getMissionOwner);
+  app.use("/api/v1", createActivityRouter());
+
   app.use("/api/v1", authMiddleware);
 
   app.get("/api/v1/missions", async (req: AuthedRequest, res) => {
@@ -67,6 +75,7 @@ export function createApp() {
       budgetUsd: Number(req.body?.budgetUsd ?? env.defaultBudgetUsd),
       outputs: Array.isArray(req.body?.outputs) ? req.body.outputs : undefined,
       plugins: installed,
+      agent: typeof req.body?.agent === "string" ? req.body.agent : undefined,
     });
     await createMissionRow({
       id: missionId,

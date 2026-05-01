@@ -33,7 +33,9 @@
     { "path": "packages/social" },
     { "path": "packages/world-gen" },
     { "path": "packages/sdk" },
-    { "path": "packages/api" }
+    { "path": "packages/api" },
+    { "path": "packages/coding-agent" },
+    { "path": "packages/research-agent" }
   ],
   "files": []
 }

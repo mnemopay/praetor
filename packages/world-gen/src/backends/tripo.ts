@@ -77,11 +77,15 @@ export class TripoBackend implements ModelBackend {
           ?? data.result?.model?.url
           ?? data.result?.glb_url;
         if (!glbUrl) throw new Error(`tripo: response had no GLB url: ${JSON.stringify(data).slice(0, 400)}`);
+        // Tripo bills against monthly credits — most accounts run on the
+        // free tier. Estimate ~$0.10 per generation when no credits are
+        // available; actual billed amount may be 0.
         return {
           backend: this.name,
           glbUrl,
           thumbUrl: data.output?.rendered_image ?? data.result?.rendered_image?.url,
           durationMs: Date.now() - started,
+          costUsd: 0.10,
           raw: data,
         };
       }

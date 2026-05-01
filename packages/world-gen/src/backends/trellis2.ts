@@ -50,6 +50,8 @@ export class Trellis2Backend implements ModelBackend {
         polyCount: typeof r.poly_count === "number" ? r.poly_count : undefined,
         textureRes: typeof r.texture_res === "number" ? r.texture_res : undefined,
         durationMs: Date.now() - started,
+        // Self-hosted endpoint: no per-call vendor cost.
+        costUsd: 0,
         raw: r,
       };
     }
@@ -91,6 +93,8 @@ export class Trellis2Backend implements ModelBackend {
       glbUrl,
       thumbUrl: thumbUrl || undefined,
       durationMs: Date.now() - started,
+      // Replicate baseline for firtoz/trellis as of 2026-05.
+      costUsd: 0.06,
       raw: { replicateOutput: out },
     };
   }

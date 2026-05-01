@@ -1,0 +1,35 @@
+{
+  "name": "@praetor/coding-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "description": "Praetor coding agent: file/git/test tools, repo-rooted, free-tier compatible.",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@praetor/agents": "*",
+    "@praetor/core": "*",
+    "@praetor/router": "*",
+    "@praetor/tools": "*",
+    "simple-git": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "author": "Jerry <jerry@getbizsuite.com>",
+  "license": "MIT"
+}

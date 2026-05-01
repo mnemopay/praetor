@@ -104,6 +104,68 @@ describe("@praetor/world-gen — selector", () => {
   });
 });
 
+describe("WORLD_GEN_PREFER cost-mode reordering", () => {
+  beforeEach(() => resetDefaultSelector());
+  afterEach(() => resetDefaultSelector());
+
+  it("defaults to quality mode when WORLD_GEN_PREFER is unset", () => {
+    const sel = new DefaultWorldGenSelector({} as any);
+    expect(sel.pref).toBe("quality");
+  });
+
+  it("flips to cost mode when WORLD_GEN_PREFER=cost", () => {
+    const sel = new DefaultWorldGenSelector({ WORLD_GEN_PREFER: "cost" } as any);
+    expect(sel.pref).toBe("cost");
+  });
+
+  it("cost mode picks Tripo over Replicate TRELLIS-2 when both keys are present", () => {
+    const sel = new DefaultWorldGenSelector({
+      WORLD_GEN_PREFER: "cost",
+      REPLICATE_API_TOKEN: "tok",
+      TRIPO_API_KEY: "tsk_x",
+    } as any);
+    expect(sel.pickModelBackend().name).toBe("tripo");
+  });
+
+  it("quality mode picks Replicate TRELLIS-2 over Tripo when both are present", () => {
+    const sel = new DefaultWorldGenSelector({
+      REPLICATE_API_TOKEN: "tok",
+      TRIPO_API_KEY: "tsk_x",
+    } as any);
+    expect(sel.pickModelBackend().name).toBe("trellis2");
+  });
+
+  it("cost mode still prefers self-hosted Hunyuan3D when its endpoint is set", () => {
+    const sel = new DefaultWorldGenSelector({
+      WORLD_GEN_PREFER: "cost",
+      HUNYUAN3D_ENDPOINT: "https://hy.example/run",
+      TRIPO_API_KEY: "tsk_x",
+      REPLICATE_API_TOKEN: "tok",
+    } as any);
+    expect(sel.pickModelBackend().name).toBe("hunyuan3d");
+  });
+
+  it("explicit override is honored in cost mode", () => {
+    const sel = new DefaultWorldGenSelector({
+      WORLD_GEN_PREFER: "cost",
+      REPLICATE_API_TOKEN: "tok",
+      TRIPO_API_KEY: "tsk_x",
+    } as any);
+    expect(sel.pickModelBackend("trellis2").name).toBe("trellis2");
+  });
+});
+
+describe("backends emit costUsd in mock results", () => {
+  it("MockModelBackend reports costUsd: 0", async () => {
+    const r = await new MockModelBackend().generateModel({ prompt: "x" });
+    expect(r.costUsd).toBe(0);
+  });
+  it("MockWorldBackend reports costUsd: 0", async () => {
+    const r = await new MockWorldBackend().generateWorld({ prompt: "x" });
+    expect(r.costUsd).toBe(0);
+  });
+});
+
 describe("backend availability gates", () => {
   it("TRELLIS-2 unavailable without keys", () => {
     expect(new Trellis2Backend({}).available).toBe(false);

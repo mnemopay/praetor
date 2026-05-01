@@ -490,3 +490,123 @@ code { font-family: monospace; background: rgba(255,255,255,0.08); padding: 0.15
   background: #06080d;
 }
 .scene-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+/* ─── Chat split panel + activity feed (Phase E) ───────────────────────── */
+.chat-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+  min-height: 60vh;
+}
+.chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+.agent-picker-label {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+.agent-picker {
+  background: #0b1220;
+  color: #e8eef5;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.9rem;
+}
+.activity-toggle { display: none; }
+
+.activity-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 0.75rem;
+  background: rgba(8, 12, 22, 0.4);
+  min-height: 60vh;
+}
+.activity-pane-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: 0.4rem;
+}
+.activity-close { display: none; }
+.activity-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-right: 0.25rem;
+}
+.activity-row {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.88rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.activity-row-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.activity-time {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+  font-size: 0.78rem;
+}
+.activity-tool-name {
+  font-weight: 600;
+  color: #cbd5e1;
+}
+.activity-row-body {
+  opacity: 0.85;
+  font-size: 0.82rem;
+  word-break: break-word;
+}
+.activity-artifact-img {
+  max-width: 100%;
+  border-radius: 6px;
+}
+.activity-artifact-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(0,0,0,0.3);
+  padding: 0.5rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+}
+
+@media (max-width: 900px) {
+  .chat-split { grid-template-columns: 1fr; }
+  .activity-toggle { display: inline-flex; margin-left: auto; }
+  .activity-pane {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(360px, 90vw);
+    max-width: 90vw;
+    transform: translateX(100%);
+    transition: transform 180ms ease;
+    z-index: 30;
+    background: #0a0f1c;
+    border-left: 1px solid rgba(255,255,255,0.08);
+    border-radius: 0;
+  }
+  .activity-pane.activity-open { transform: translateX(0); }
+  .activity-close { display: inline-flex; }
+}

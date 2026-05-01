@@ -3,8 +3,18 @@ export interface CharterBudget {
   approvalThresholdUsd: number;
 }
 
+export type CharterRole =
+  | "architect"
+  | "developer"
+  | "auditor"
+  | "designer"
+  | "marketer"
+  | "coding"
+  | "research"
+  | "world-gen";
+
 export interface CharterAgent {
-  role: "architect" | "developer" | "auditor" | "designer" | "marketer";
+  role: CharterRole;
   model?: string;
   skills?: string[];
 }

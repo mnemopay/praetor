@@ -96,6 +96,8 @@ export class FalSam3dBackend implements ModelBackend {
       glbUrl,
       thumbUrl: r.preview_url ?? r.thumbnail_url,
       durationMs: Date.now() - started,
+      // fal-ai/sam-3/3d-objects baseline as of 2026-05.
+      costUsd: 0.05,
       raw: r,
     };
   }

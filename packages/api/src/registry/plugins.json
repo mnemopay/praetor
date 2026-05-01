@@ -22,5 +22,17 @@
     "version": "0.0.1",
     "provider": "praetor",
     "description": "Web scraping and crawl tooling."
+  },
+  {
+    "name": "@praetor/coding-agent",
+    "version": "0.1.0",
+    "provider": "praetor",
+    "description": "Coding agent: read/write/edit files, run tests, drive git, and execute build commands inside a constrained repo root."
+  },
+  {
+    "name": "@praetor/research-agent",
+    "version": "0.1.0",
+    "provider": "praetor",
+    "description": "Research agent: search the web, fetch primary sources, synthesize structured reports with citations, and feed findings into the knowledge base."
   }
 ]

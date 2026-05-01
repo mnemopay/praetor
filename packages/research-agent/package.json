@@ -1,0 +1,36 @@
+{
+  "name": "@praetor/research-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "description": "Praetor research agent: web search, source fetch, structured synthesis with citations.",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@praetor/agents": "*",
+    "@praetor/core": "*",
+    "@praetor/knowledge": "*",
+    "@praetor/router": "*",
+    "@praetor/scrape": "*",
+    "@praetor/tools": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "author": "Jerry <jerry@getbizsuite.com>",
+  "license": "MIT"
+}

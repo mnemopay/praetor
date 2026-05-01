@@ -1,4 +1,4 @@
-import type { AuditHook, MeterHook, ModelRequest, ModelResult } from "../types.js";
+import type { AuditHook, MeterHook, ModelRequest, ModelResult, WorldGenActivityBus } from "../types.js";
 import type { WorldGenSelector } from "../backends/selector.js";
 
 export interface GenerateModelArgs {
@@ -14,6 +14,9 @@ export interface GenerateModelDeps {
   meter?: MeterHook;
   audit?: AuditHook;
   missionId?: string;
+  /** Optional live activity bus — when present, the tool publishes
+   *  tool.start / tool.end events. */
+  bus?: WorldGenActivityBus;
 }
 
 const SKU_BY_DETAIL: Record<"draft" | "standard" | "high", { sku: string; estUsd: number }> = {
@@ -22,7 +25,7 @@ const SKU_BY_DETAIL: Record<"draft" | "standard" | "high", { sku: string; estUsd
   high: { sku: "world_gen.model.high", estUsd: 0.40 },
 };
 
-/** Run the tool. Throws on failure; emits audit + meter events around the call. */
+/** Run the tool. Throws on failure; emits audit + meter + activity events around the call. */
 export async function generate_3d_model(args: GenerateModelArgs, deps: GenerateModelDeps): Promise<ModelResult> {
   const detail = args.detail ?? "standard";
   const { sku, estUsd } = SKU_BY_DETAIL[detail];
@@ -34,6 +37,19 @@ export async function generate_3d_model(args: GenerateModelArgs, deps: GenerateM
     backend: args.backend,
     seed: args.seed,
   };
+
+  const eventId = newEventId();
+  const missionId = deps.missionId ?? "";
+  if (deps.bus && missionId) {
+    deps.bus.publish({
+      kind: "tool.start",
+      missionId,
+      eventId,
+      toolName: "generate_3d_model",
+      args: { prompt: args.prompt, detail, backend: backend.name },
+      ts: new Date().toISOString(),
+    });
+  }
 
   const hold = deps.meter ? await deps.meter.charge({ sku, estUsd, missionId: deps.missionId }) : null;
   try {
@@ -47,6 +63,17 @@ export async function generate_3d_model(args: GenerateModelArgs, deps: GenerateM
       costUsd: result.costUsd ?? estUsd,
       resultUrl: result.glbUrl,
     });
+    if (deps.bus && missionId) {
+      deps.bus.publish({
+        kind: "tool.end",
+        missionId,
+        eventId,
+        ok: true,
+        result: { glbUrl: result.glbUrl, thumbUrl: result.thumbUrl, backend: result.backend },
+        costUsd: result.costUsd ?? estUsd,
+        ts: new Date().toISOString(),
+      });
+    }
     return result;
   } catch (err) {
     if (hold) await hold.release();
@@ -57,6 +84,21 @@ export async function generate_3d_model(args: GenerateModelArgs, deps: GenerateM
       durationMs: 0,
       error: err instanceof Error ? err.message : String(err),
     });
+    if (deps.bus && missionId) {
+      deps.bus.publish({
+        kind: "tool.end",
+        missionId,
+        eventId,
+        ok: false,
+        result: { error: err instanceof Error ? err.message : String(err) },
+        ts: new Date().toISOString(),
+      });
+    }
     throw err;
   }
+}
+
+function newEventId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }

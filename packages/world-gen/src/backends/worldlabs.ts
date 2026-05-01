@@ -148,6 +148,8 @@ function shapeResult(
     glbUrl,
     thumbUrl,
     durationMs: Date.now() - started,
+    // World Labs Marble observed pricing as of 2026-05 (~$0.18/world).
+    costUsd: 0.18,
     raw: { ...extra, world_id: world?.world_id, world_marble_url: world?.world_marble_url, model: world?.model, assets: world?.assets },
   };
 }
