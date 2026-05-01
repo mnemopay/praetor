@@ -16,3 +16,11 @@ coverage
 .praetor/mission-*.log
 praetor-out
 
+
+# Aider working files
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v4/
+
+# Stray nested checkout
+praetor/

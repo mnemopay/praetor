@@ -38,9 +38,14 @@ describe("@praetor/world-gen — selector", () => {
     expect(() => sel.pickWorldBackend()).toThrow(/no live world backend/);
   });
 
-  it("selects Hunyuan3D first when REPLICATE_API_TOKEN is present (it's preferred over TRELLIS-2 by default)", () => {
-    const sel = new DefaultWorldGenSelector({ REPLICATE_API_TOKEN: "tok" } as any);
+  it("selects Hunyuan3D first when FAL_API_KEY is present (preferred over Replicate-only TRELLIS-2)", () => {
+    const sel = new DefaultWorldGenSelector({ FAL_API_KEY: "k" } as any);
     expect(sel.pickModelBackend().name).toBe("hunyuan3d");
+  });
+
+  it("selects TRELLIS-2 when only REPLICATE_API_TOKEN is set (Hunyuan3D no longer activates on Replicate)", () => {
+    const sel = new DefaultWorldGenSelector({ REPLICATE_API_TOKEN: "tok" } as any);
+    expect(sel.pickModelBackend().name).toBe("trellis2");
   });
 
   it("explicit \"trellis2\" override is honored when REPLICATE_API_TOKEN is set", () => {
@@ -48,10 +53,10 @@ describe("@praetor/world-gen — selector", () => {
     expect(sel.pickModelBackend("trellis2").name).toBe("trellis2");
   });
 
-  it("prefers Hunyuan3D self-host over Replicate", () => {
+  it("prefers Hunyuan3D self-host over fal hosted", () => {
     const sel = new DefaultWorldGenSelector({
       HUNYUAN3D_ENDPOINT: "https://hy.example/run",
-      REPLICATE_API_TOKEN: "tok",
+      FAL_API_KEY: "k",
     } as any);
     expect(sel.pickModelBackend().name).toBe("hunyuan3d");
   });
@@ -72,6 +77,7 @@ describe("@praetor/world-gen — selector", () => {
   it("listAvailable() reports backends discovered from env", () => {
     const sel = new DefaultWorldGenSelector({
       REPLICATE_API_TOKEN: "x",
+      FAL_API_KEY: "f",
       TRIPO_API_KEY: "y",
       WORLDLABS_API_KEY: "z",
     } as any);
@@ -79,6 +85,7 @@ describe("@praetor/world-gen — selector", () => {
     expect(a.models).toContain("hunyuan3d");
     expect(a.models).toContain("trellis2");
     expect(a.models).toContain("tripo");
+    expect(a.models).toContain("fal-sam-3d");
     expect(a.models).toContain("mock");
     expect(a.worlds).toContain("worldlabs");
     expect(a.worlds).toContain("mock");

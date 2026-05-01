@@ -2,16 +2,14 @@ import type { ModelBackend, ModelRequest, ModelResult } from "../types.js";
 
 /**
  * TRELLIS-2 — Microsoft Research's native 3D generative model. Outputs GLB
- * with PBR textures in ~10–30s. Two host modes:
+ * with PBR textures. Two host modes:
  *
  * 1. Replicate (default) — set `REPLICATE_API_TOKEN`. Uses the public
- *    `firtoz/trellis` model on Replicate's serverless GPU pool.
- * 2. Self-hosted — set `TRELLIS2_ENDPOINT` to a server that accepts the same
- *    JSON shape `{prompt, image_url?, detail}` and returns `{glb_url, thumb_url}`.
- *    Drop-in for ComfyUI's Trellis 2 workflow exposed via REST.
+ *    `firtoz/trellis` model. Image-only — pure-text prompts will be rejected.
+ * 2. Self-hosted — set `TRELLIS2_ENDPOINT` to a server that accepts
+ *    `{prompt, image_url?, detail}` and returns `{glb_url, thumb_url}`.
  *
- * Either way the public API of this module stays the same — the registry
- * doesn't know which one ran.
+ * Spec verified 2026-05 against https://replicate.com/firtoz/trellis/api
  */
 export interface Trellis2Config {
   replicateToken?: string;
@@ -58,25 +56,40 @@ export class Trellis2Backend implements ModelBackend {
     if (!this.cfg.replicateToken) {
       throw new Error("trellis2: no endpoint and no REPLICATE_API_TOKEN configured");
     }
+    if (!req.referenceImageUrl) {
+      throw new Error("trellis2: firtoz/trellis on Replicate is image-only — provide referenceImageUrl, or set TRELLIS2_ENDPOINT for a text-capable host");
+    }
     const out = await runReplicate(
       this.cfg.replicateToken,
       this.cfg.replicateModel ?? DEFAULT_REPLICATE_MODEL,
       {
-        prompt: req.prompt,
-        image: req.referenceImageUrl ?? undefined,
-        seed: req.seed,
-        // detail maps onto Replicate's `mesh_simplify` / `texture_size`
+        // Real schema: `images` is an ARRAY, and `generate_model` MUST be true to get a GLB
+        images: [req.referenceImageUrl],
+        generate_model: true,
+        generate_color: true,
+        generate_normal: false,
+        seed: req.seed ?? 0,
+        randomize_seed: req.seed == null,
         texture_size: detailToTextureSize(req.detail ?? "standard"),
         mesh_simplify: detailToMeshSimplify(req.detail ?? "standard"),
+        ss_sampling_steps: 12,
+        slat_sampling_steps: 12,
+        ss_guidance_strength: 7.5,
+        slat_guidance_strength: 3,
       },
       this.cfg.timeoutMs ?? 5 * 60_000,
       signal,
     );
-    const glbUrl = pickReplicateGlb(out);
+    // Real output is an OBJECT: { model_file, color_video, normal_video, no_background_images }
+    const output = out.output as Record<string, unknown> | undefined;
+    const glbUrl = typeof output?.model_file === "string"
+      ? output.model_file
+      : pickReplicateGlb(out);
+    const thumbUrl = pickReplicateThumb(out);
     return {
       backend: this.name,
       glbUrl,
-      thumbUrl: pickReplicateThumb(out) || undefined,
+      thumbUrl: thumbUrl || undefined,
       durationMs: Date.now() - started,
       raw: { replicateOutput: out },
     };
@@ -113,7 +126,7 @@ export async function callJson(
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`POST ${url} -> ${res.status}: ${text.slice(0, 200)}`);
+      throw new Error(`POST ${url} -> ${res.status}: ${text.slice(0, 400)}`);
     }
     return (await res.json()) as Record<string, any>;
   } finally {
@@ -126,6 +139,8 @@ export function pickUrl(obj: Record<string, any>, keys: string[]): string {
     const v = obj[k];
     if (typeof v === "string" && v.length > 0) return v;
     if (Array.isArray(v) && typeof v[0] === "string") return v[0];
+    // Some APIs nest at { key: { url: "..." } }
+    if (v && typeof v === "object" && typeof v.url === "string") return v.url;
   }
   throw new Error(`response missing one of: ${keys.join(", ")}`);
 }
@@ -133,6 +148,10 @@ export function pickUrl(obj: Record<string, any>, keys: string[]): string {
 /**
  * Runs a Replicate prediction to completion. Replicate's standard async flow:
  * POST /predictions -> poll GET /predictions/:id until status is succeeded|failed|canceled.
+ *
+ * Slug forms accepted:
+ *   "owner/name"               -> POST /v1/models/owner/name/predictions
+ *   "owner/name:version_hash"  -> POST /v1/predictions  with { version, input }
  */
 export async function runReplicate(
   token: string,
@@ -141,10 +160,13 @@ export async function runReplicate(
   timeoutMs: number,
   signal?: AbortSignal,
 ): Promise<{ status: string; output: unknown; metrics?: any; error?: string }> {
-  const headers = { authorization: `Token ${token}`, "content-type": "application/json" };
-  const [owner, rest] = model.includes(":") ? splitVersioned(model) : [null, model];
-  const url = owner ? "https://api.replicate.com/v1/predictions" : `https://api.replicate.com/v1/models/${model}/predictions`;
-  const body = owner ? { version: rest, input } : { input };
+  const headers = { authorization: `Bearer ${token}`, "content-type": "application/json" };
+  const colonIdx = model.indexOf(":");
+  const isVersioned = colonIdx >= 0;
+  const slug = isVersioned ? model.slice(0, colonIdx) : model;
+  const version = isVersioned ? model.slice(colonIdx + 1) : null;
+  const url = version ? "https://api.replicate.com/v1/predictions" : `https://api.replicate.com/v1/models/${slug}/predictions`;
+  const body = version ? { version, input } : { input };
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), timeoutMs);
   if (signal) signal.addEventListener("abort", () => ac.abort(), { once: true });
@@ -152,7 +174,7 @@ export async function runReplicate(
     const created = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal: ac.signal });
     if (!created.ok) {
       const text = await created.text().catch(() => "");
-      throw new Error(`replicate POST ${created.status}: ${text.slice(0, 200)}`);
+      throw new Error(`replicate POST ${url} -> ${created.status}: ${text.slice(0, 400)}`);
     }
     let pred = (await created.json()) as { id: string; status: string; output?: unknown; error?: string };
     while (pred.status !== "succeeded" && pred.status !== "failed" && pred.status !== "canceled") {
@@ -170,16 +192,10 @@ export async function runReplicate(
   }
 }
 
-function splitVersioned(spec: string): [string, string] {
-  const [owner, version] = spec.split(":");
-  return [owner, version];
-}
-
 function pickReplicateGlb(out: { output: unknown }): string {
-  // Replicate output shapes vary by model; prefer .glb urls in any string|array|object.
+  // Prefer .glb urls in any string|array|object.
   const candidates = collectStrings(out.output).filter((s) => s.endsWith(".glb") || s.endsWith(".gltf"));
   if (candidates[0]) return candidates[0];
-  // Some models return an object like { mesh: "...", texture: "..." }; pick first url.
   const all = collectStrings(out.output);
   if (all[0]) return all[0];
   throw new Error("replicate output had no GLB url");
@@ -203,7 +219,7 @@ function detailToTextureSize(d: "draft" | "standard" | "high"): number {
 }
 
 function detailToMeshSimplify(d: "draft" | "standard" | "high"): number {
-  return d === "draft" ? 0.95 : d === "high" ? 0.85 : 0.9;
+  return d === "draft" ? 0.95 : d === "high" ? 0.9 : 0.92;
 }
 
 function sleep(ms: number) { return new Promise((r) => setTimeout(r, ms)); }
