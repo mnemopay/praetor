@@ -24,6 +24,72 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const SUPABASE_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
+const THEMES = ["dark", "solarized-light", "solarized-dark"] as const;
+type Theme = (typeof THEMES)[number];
+const THEME_STORAGE_KEY = "praetor.theme";
+const THEME_LABEL: Record<Theme, string> = {
+  dark: "Dark",
+  "solarized-light": "Solarized light",
+  "solarized-dark": "Solarized dark",
+};
+const THEME_GLYPH: Record<Theme, string> = {
+  dark: "\u25D1",
+  "solarized-light": "\u263C",
+  "solarized-dark": "\u263E",
+};
+
+function defaultTheme(): Theme {
+  if (typeof window === "undefined") return "dark";
+  try {
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
+      return "solarized-light";
+    }
+  } catch {
+    // ignore matchMedia failures
+  }
+  return "dark";
+}
+
+function loadTheme(): Theme {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored && (THEMES as readonly string[]).includes(stored)) {
+      return stored as Theme;
+    }
+  } catch {
+    // localStorage may be disabled
+  }
+  return defaultTheme();
+}
+
+function applyTheme(next: Theme) {
+  currentTheme = next;
+  document.documentElement.setAttribute("data-theme", next);
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, next);
+  } catch {
+    // ignore quota / disabled storage
+  }
+  refreshThemeButtons();
+}
+
+function cycleTheme() {
+  const idx = THEMES.indexOf(currentTheme);
+  const next = THEMES[(idx + 1) % THEMES.length];
+  applyTheme(next);
+}
+
+function refreshThemeButtons() {
+  const next = THEMES[(THEMES.indexOf(currentTheme) + 1) % THEMES.length];
+  for (const btn of Array.from(document.querySelectorAll<HTMLButtonElement>(".btn-theme"))) {
+    btn.textContent = `${THEME_GLYPH[currentTheme]} ${THEME_LABEL[currentTheme]}`;
+    btn.title = `Theme: ${THEME_LABEL[currentTheme]}. Click for ${THEME_LABEL[next]}.`;
+    btn.setAttribute("aria-label", `Switch theme. Current: ${THEME_LABEL[currentTheme]}.`);
+  }
+}
+
+let currentTheme: Theme = "dark";
+
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("dashboard: #app container not found");
 
@@ -42,6 +108,7 @@ let selectedAgent: AgentChoice = "native";
 void bootstrap();
 
 async function bootstrap() {
+  applyTheme(loadTheme());
   if (!SUPABASE_CONFIGURED) {
     renderConfigError();
     return;
@@ -94,6 +161,7 @@ function render() {
         </div>
         <div class="topbar-actions">
           <span id="apiHealth" class="status-pill">checking…</span>
+          <button id="themeToggle" class="btn-theme" type="button">Theme</button>
           <button id="signOutBtn" class="btn-secondary">Sign out</button>
         </div>
       </header>
@@ -186,6 +254,10 @@ function wireAuthedHandlers() {
   document.getElementById("signOutBtn")?.addEventListener("click", async () => {
     await supabase?.auth.signOut();
   });
+  document.getElementById("themeToggle")?.addEventListener("click", () => {
+    cycleTheme();
+  });
+  refreshThemeButtons();
   for (const btn of Array.from(document.querySelectorAll<HTMLButtonElement>(".tab-btn"))) {
     btn.addEventListener("click", () => {
       currentRoute = btn.dataset.route as Route;
