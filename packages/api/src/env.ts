@@ -13,4 +13,6 @@ export const env = {
   supabaseUrl: required("SUPABASE_URL"),
   supabaseServiceRoleKey: required("SUPABASE_SERVICE_ROLE_KEY"),
   defaultBudgetUsd: Number(process.env.DEFAULT_MISSION_BUDGET_USD ?? "5"),
+  /** Comma-separated list of allowed CORS origins. Localhost is always allowed in addition to this. Set to "*" to allow all (not recommended). */
+  allowedOrigins: process.env.ALLOWED_ORIGINS,
 };

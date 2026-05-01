@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { argv, exit } from "node:process";
 import { parse as parseYamlReal } from "yaml";
 import {
@@ -122,7 +123,7 @@ function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAud
   return new CoordinatorAgent(router, registry, { fiscal, audit }, policy, route);
 }
 
-async function buildEnhancedRegistry(charter: Charter, missionId: string, audit?: AuditSink) {
+export async function buildEnhancedRegistry(charter: Charter, missionId: string, audit?: AuditSink) {
   const reg = defaultRegistry();
   const kb = defaultKnowledgeBase({ missionId });
   const design = new DesignPack();
@@ -851,6 +852,11 @@ function usage(): never {
   exit(1);
 }
 
+// Re-exports so the API server, smoke tests, and embedders can build the same
+// registry the CLI uses when running a charter.
+export { defaultRegistry, MockPayments, MnemoPayAdapter, EchoAgent, NativePraetorEngine, CoordinatorAgent };
+export { LiveMnemoPayClient };
+
 async function main() {
   const [, , cmd, ...rest] = argv;
   if (!cmd) usage();
@@ -863,4 +869,9 @@ async function main() {
   }
 }
 
-main().catch((e) => { console.error(e); exit(1); });
+// Only auto-run when invoked as a script — keeps `import` from triggering main().
+const entry = process.argv[1] ? resolve(process.argv[1]) : "";
+const self = fileURLToPath(import.meta.url);
+if (entry === self) {
+  main().catch((e) => { console.error(e); exit(1); });
+}

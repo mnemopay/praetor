@@ -17,8 +17,28 @@ export function createApp() {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
 
+  // CORS for the Vite dashboard. Allow any localhost origin in dev; tighten via env in prod.
+  const allowedOrigins = (env.allowedOrigins ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  app.use((req, res, next) => {
+    const origin = req.headers.origin as string | undefined;
+    const isLocal = origin && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    const isAllowed = origin && (isLocal || allowedOrigins.includes(origin) || allowedOrigins.includes("*"));
+    if (origin && isAllowed) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Vary", "Origin");
+      res.setHeader("Access-Control-Allow-Credentials", "true");
+    }
+    res.setHeader("Access-Control-Allow-Headers", "authorization,content-type");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    if (req.method === "OPTIONS") {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
+
   app.get("/health", (_req, res) => {
-    res.json({ ok: true });
+    res.json({ ok: true, service: "praetor-api", time: new Date().toISOString() });
   });
 
   app.post("/api/v1/auth/session", authMiddleware, (req: AuthedRequest, res) => {

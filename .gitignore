@@ -8,3 +8,11 @@ dist
 coverage
 .tsbuildinfo
 *.tsbuildinfo
+
+# Mission scratch files (charters Praetor writes during runs)
+.praetor/temp-*.yaml
+.praetor/saas-*.yaml
+.praetor/*.log
+.praetor/mission-*.log
+praetor-out
+
