@@ -1,0 +1,54 @@
+{
+  "name": "@praetor/world-gen",
+  "version": "0.1.0",
+  "description": "Praetor World-Gen — native text/image -> 3D model (GLB) and text/image/video -> 3D world (Gaussian splat) generation. Backend-agnostic: TRELLIS-2, Hunyuan3D 2.1, Tripo, fal.ai sam-3, World Labs Marble, Tencent HY-World 2.0. Includes a self-contained web viewer (Spark 2.0 + <model-viewer> + SuperSplat embed) so generated assets are explorable without third-party UI.",
+  "keywords": [
+    "praetor",
+    "3d",
+    "world-gen",
+    "gaussian-splatting",
+    "gltf",
+    "glb",
+    "trellis",
+    "hunyuan3d",
+    "marble",
+    "hy-world"
+  ],
+  "homepage": "https://praetor.mnemopay.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JerryOmiagbo/praetor.git",
+    "directory": "packages/world-gen"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./viewer": {
+      "types": "./dist/viewer/index.d.ts",
+      "import": "./dist/viewer/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Jerry <jerry@getbizsuite.com>"
+}

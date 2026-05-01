@@ -1,4 +1,6 @@
 import express from "express";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { authMiddleware, type AuthedRequest } from "./auth.js";
 import { buildCharter } from "./charter.js";
 import {
@@ -110,6 +112,55 @@ export function createApp() {
       thresholdUsd: env.defaultBudgetUsd,
       currentSpendUsd: 0,
     });
+  });
+
+  // ─── World-gen: list and serve scenes published via @praetor/world-gen ──────
+  const worldGenRoot = resolve(env.worldGenOutDir ?? join(env.repoRoot, "praetor-out", "scenes"));
+
+  app.get("/api/v1/world-gen/scenes", (_req: AuthedRequest, res) => {
+    if (!existsSync(worldGenRoot)) {
+      res.json({ ok: true, scenes: [], root: worldGenRoot });
+      return;
+    }
+    const scenes: Array<Record<string, unknown>> = [];
+    for (const entry of readdirSync(worldGenRoot)) {
+      const dir = join(worldGenRoot, entry);
+      try {
+        if (!statSync(dir).isDirectory()) continue;
+        const manifestPath = join(dir, "manifest.json");
+        if (!existsSync(manifestPath)) continue;
+        const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+        scenes.push({
+          id: manifest.id ?? entry,
+          title: manifest.title ?? entry,
+          glbUrl: manifest.glbUrl ?? null,
+          splatUrl: manifest.splatUrl ?? null,
+          publishedAt: manifest.publishedAt ?? null,
+          viewerPath: `/api/v1/world-gen/scenes/${entry}/index.html`,
+        });
+      } catch {
+        // Skip unreadable scene
+      }
+    }
+    scenes.sort((a, b) => String(b.publishedAt ?? "").localeCompare(String(a.publishedAt ?? "")));
+    res.json({ ok: true, scenes, root: worldGenRoot });
+  });
+
+  app.get("/api/v1/world-gen/scenes/:id/:file", (req: AuthedRequest, res) => {
+    const id = String(req.params.id ?? "").replace(/[^a-z0-9-_]/gi, "");
+    const file = String(req.params.file ?? "").replace(/[^a-z0-9-_.]/gi, "");
+    if (!id || !file) {
+      res.status(400).json({ ok: false, error: "invalid scene path" });
+      return;
+    }
+    const target = resolve(join(worldGenRoot, id, file));
+    if (!target.startsWith(worldGenRoot) || !existsSync(target)) {
+      res.status(404).json({ ok: false, error: "scene not found" });
+      return;
+    }
+    if (file.endsWith(".html")) res.setHeader("content-type", "text/html; charset=utf-8");
+    else if (file.endsWith(".json")) res.setHeader("content-type", "application/json");
+    res.send(readFileSync(target));
   });
 
   return app;

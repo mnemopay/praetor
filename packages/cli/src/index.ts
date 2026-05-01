@@ -26,6 +26,13 @@ import { SysadminModule } from "@praetor/sysadmin";
 import { SandboxDispatcher, MockSandboxFactory } from "@praetor/sandbox";
 import { capture_screen, analyze_image } from "@praetor/vision";
 import { post_x_tweet, post_tiktok_video, schedule_cron_job } from "@praetor/social";
+import {
+  defaultSelector as worldGenSelector,
+  generate_3d_model as worldGenModel,
+  generate_3d_world as worldGenWorld,
+  edit_3d_scene as worldGenEdit,
+  publish_3d_scene as worldGenPublish,
+} from "@praetor/world-gen";
 import { defaultRenderer } from "@praetor/game-assets";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -252,6 +259,105 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         written.push(path);
       }
       return { success: true, message: `Canvas3D files saved to: ${written.join(", ")}` };
+    }
+  );
+
+  // ---- @praetor/world-gen — native Mint replacement ---------------------
+  // Selector resolves a backend at call time from env (HUNYUAN3D_ENDPOINT,
+  // REPLICATE_API_TOKEN, TRIPO_API_KEY, FAL_API_KEY, WORLDLABS_API_KEY,
+  // HYWORLD_ENDPOINT). Falls back to a deterministic mock so smoke tests pass
+  // even without keys.
+  const wgSelector = worldGenSelector();
+
+  reg.register(
+    {
+      name: "generate_3d_model",
+      description: "Generate a 3D model (GLB) from a text prompt or reference image. Backends: TRELLIS-2, Hunyuan3D 2.1, Tripo, fal sam-3 (auto-selected from env).",
+      schema: {
+        type: "object",
+        properties: {
+          prompt: { type: "string" },
+          referenceImageUrl: { type: "string", description: "Optional image URL — switches to image-to-3D mode." },
+          detail: { type: "string", enum: ["draft", "standard", "high"] },
+          backend: { type: "string", description: "Optional explicit backend: trellis2|hunyuan3d|tripo|fal-sam-3d|mock" },
+          seed: { type: "integer" }
+        },
+        required: ["prompt"]
+      },
+      tags: ["design", "world-gen", "3d", "glb"]
+    },
+    async (args) => {
+      const result = await worldGenModel(args as any, { selector: wgSelector, missionId });
+      return { success: true, ...result };
+    }
+  );
+
+  reg.register(
+    {
+      name: "generate_3d_world",
+      description: "Generate an explorable 3D world (Gaussian splat + GLB mesh) from text/image/panorama/video. Backends: HY-World 2.0 (self-hosted), World Labs Marble.",
+      schema: {
+        type: "object",
+        properties: {
+          prompt: { type: "string" },
+          referenceImageUrl: { type: "string" },
+          panoramaUrl: { type: "string", description: "Optional 360 equirectangular panorama URL." },
+          videoUrl: { type: "string", description: "Optional reference video URL." },
+          detail: { type: "string", enum: ["draft", "standard", "high"] },
+          backend: { type: "string", description: "Optional: hyworld|worldlabs|mock" },
+          seed: { type: "integer" }
+        },
+        required: ["prompt"]
+      },
+      tags: ["design", "world-gen", "3d", "splat"]
+    },
+    async (args) => {
+      const result = await worldGenWorld(args as any, { selector: wgSelector, missionId });
+      return { success: true, ...result };
+    }
+  );
+
+  reg.register(
+    {
+      name: "edit_3d_scene",
+      description: "Open a generated splat scene in SuperSplat (browser-based MIT-licensed splat editor). Returns a deep-link URL with the asset preloaded.",
+      schema: {
+        type: "object",
+        properties: {
+          assetUrl: { type: "string", description: "PLY or SPZ asset URL." },
+          title: { type: "string" },
+          callbackUrl: { type: "string", description: "Optional URL the editor will POST the edited scene to." }
+        },
+        required: ["assetUrl"]
+      },
+      tags: ["design", "world-gen", "editor"]
+    },
+    async (args) => {
+      const result = worldGenEdit(args as any);
+      return { success: true, ...result };
+    }
+  );
+
+  reg.register(
+    {
+      name: "publish_3d_scene",
+      description: "Write a self-contained viewer page (model-viewer for GLB, Spark 2.0 for splats) for a generated asset. Output drops onto any static host.",
+      schema: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          glbUrl: { type: "string" },
+          splatUrl: { type: "string" },
+          title: { type: "string" },
+          background: { type: "string" }
+        },
+        required: ["id"]
+      },
+      tags: ["design", "world-gen", "viewer"]
+    },
+    async (args) => {
+      const result = worldGenPublish({ ...(args as any), outDir: join(outDir, "scenes") });
+      return { success: true, ...result };
     }
   );
 

@@ -468,3 +468,25 @@ textarea.chat-input { padding: 0.75rem 1rem; }
 }
 
 code { font-family: monospace; background: rgba(255,255,255,0.08); padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }
+
+/* ─── World tab ────────────────────────────────────────────────────────── */
+.world-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.world-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 1.25rem;
+}
+.scene-card { display: flex; flex-direction: column; gap: 0.6rem; }
+.scene-frame {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  background: #06080d;
+}
+.scene-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }

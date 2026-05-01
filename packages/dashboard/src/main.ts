@@ -3,9 +3,17 @@ import { createClient, type Session } from "@supabase/supabase-js";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 
-type Route = "chat" | "missions" | "audit" | "billing" | "marketplace";
+type Route = "chat" | "missions" | "audit" | "billing" | "marketplace" | "world";
 type Mission = { id: string; status: string; goal: string; created_at: string };
 type Plugin = { name: string; version: string; provider: string; description: string };
+type WorldScene = {
+  id: string;
+  title: string;
+  glbUrl: string | null;
+  splatUrl: string | null;
+  publishedAt: string | null;
+  viewerPath: string;
+};
 type ChatMessage = { id: string; role: "user" | "praetor" | "system"; content: string; missionId?: string; status?: string };
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8788").replace(/\/$/, "");
@@ -83,6 +91,7 @@ function render() {
         ${tabButton("chat", "Chat")}
         ${tabButton("missions", "Missions")}
         ${tabButton("audit", "Audit")}
+        ${tabButton("world", "World")}
         ${tabButton("billing", "Billing")}
         ${tabButton("marketplace", "Marketplace")}
       </nav>
@@ -212,6 +221,7 @@ async function renderRoute() {
     case "audit": return renderAudit();
     case "billing": return renderBilling();
     case "marketplace": return renderMarketplace();
+    case "world": return renderWorld();
   }
 }
 
@@ -469,6 +479,78 @@ async function renderBilling() {
   } catch (err) {
     view.innerHTML = `<p class="card-hint error">Network error: ${escapeHtml((err as Error).message)}</p>`;
   }
+}
+
+// ─── World ───────────────────────────────────────────────────────────────
+// Browses 3D models, gaussian-splat worlds, and SuperSplat-edited scenes
+// produced by @praetor/world-gen tools (generate_3d_model, generate_3d_world,
+// publish_3d_scene). Embeds <model-viewer> for GLBs and Spark 2.0 for splats.
+
+async function renderWorld() {
+  const view = document.getElementById("view");
+  if (!view) return;
+  view.innerHTML = `<p class="card-hint">Loading scenes…</p>`;
+  try {
+    const res = await authedFetch("/api/v1/world-gen/scenes");
+    const payload = await res.json();
+    if (!res.ok) {
+      view.innerHTML = `<p class="card-hint error">${escapeHtml(payload.error ?? "Unable to load scenes")}</p>`;
+      return;
+    }
+    const scenes = (payload.scenes ?? []) as WorldScene[];
+    view.innerHTML = `
+      <div class="stack">
+        <div class="world-toolbar">
+          <div>
+            <p class="card-label">World-gen scenes</p>
+            <p class="card-hint">Run <code>generate_3d_model</code> / <code>generate_3d_world</code> in chat, then publish with <code>publish_3d_scene</code>.</p>
+          </div>
+          <button class="btn-secondary" id="refreshScenes">Refresh</button>
+        </div>
+        ${scenes.length === 0 ? `
+          <div class="card">
+            <p class="card-label">No scenes yet</p>
+            <p class="card-hint">Try a chat prompt like “Generate a 3D model of a cyberpunk lantern, then publish it as scene <code>lantern-01</code>”.</p>
+          </div>
+        ` : `
+          <div class="world-grid">
+            ${scenes.map(renderSceneCard).join("")}
+          </div>
+        `}
+      </div>
+    `;
+    document.getElementById("refreshScenes")?.addEventListener("click", () => void renderWorld());
+    for (const btn of Array.from(document.querySelectorAll<HTMLButtonElement>(".scene-edit-btn"))) {
+      btn.addEventListener("click", () => {
+        const url = btn.dataset.url;
+        if (!url) return;
+        const supersplat = `https://playcanvas.com/supersplat/editor?load=${encodeURIComponent(url)}`;
+        window.open(supersplat, "_blank", "noopener,noreferrer");
+      });
+    }
+  } catch (err) {
+    view.innerHTML = `<p class="card-hint error">Network error: ${escapeHtml((err as Error).message)}</p>`;
+  }
+}
+
+function renderSceneCard(scene: WorldScene): string {
+  const kind = scene.splatUrl ? "world" : "model";
+  const viewerSrc = `${API_BASE}${scene.viewerPath}`;
+  const editLink = scene.splatUrl
+    ? `<button class="btn-secondary scene-edit-btn" data-url="${escapeHtml(scene.splatUrl)}">Edit in SuperSplat ↗</button>`
+    : "";
+  const ts = scene.publishedAt ? new Date(scene.publishedAt).toLocaleString() : "unpublished";
+  return `
+    <div class="card scene-card">
+      <p class="card-label">${escapeHtml(kind)} · ${ts}</p>
+      <p class="card-value">${escapeHtml(scene.title || scene.id)}</p>
+      <iframe class="scene-frame" src="${escapeHtml(viewerSrc)}" loading="lazy" allow="xr-spatial-tracking; fullscreen"></iframe>
+      <div class="scene-actions">
+        <a class="btn-secondary" href="${escapeHtml(viewerSrc)}" target="_blank" rel="noopener">Open viewer ↗</a>
+        ${editLink}
+      </div>
+    </div>
+  `;
 }
 
 // ─── Marketplace ──────────────────────────────────────────────────────────────

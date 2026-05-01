@@ -17,6 +17,7 @@
     { "path": "../tools" },
     { "path": "../sandbox" },
     { "path": "../vision" },
-    { "path": "../social" }
+    { "path": "../social" },
+    { "path": "../world-gen" }
   ]
 }

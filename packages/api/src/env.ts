@@ -15,4 +15,6 @@ export const env = {
   defaultBudgetUsd: Number(process.env.DEFAULT_MISSION_BUDGET_USD ?? "5"),
   /** Comma-separated list of allowed CORS origins. Localhost is always allowed in addition to this. Set to "*" to allow all (not recommended). */
   allowedOrigins: process.env.ALLOWED_ORIGINS,
+  /** Where world-gen scenes published via publish_3d_scene live. Default: <repoRoot>/praetor-out/scenes */
+  worldGenOutDir: process.env.WORLD_GEN_OUT_DIR,
 };

@@ -29,6 +29,7 @@
     "@praetor/sandbox": "*",
     "@praetor/vision": "*",
     "@praetor/social": "*",
+    "@praetor/world-gen": "*",
     "yaml": "^2.5.0"
   },
   "author": "Jerry <jerry@getbizsuite.com>",

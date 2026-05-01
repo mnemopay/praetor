@@ -78,6 +78,22 @@ const safeProbes = [
     name: "list_dir",
     input: { path: process.cwd() },
   },
+  // ─── @praetor/world-gen probes ───────────────────────────────────────────
+  // edit_3d_scene is pure-sync (just emits a SuperSplat deep link).
+  {
+    name: "edit_3d_scene",
+    input: { assetUrl: "https://example.com/scene.spz", title: "smoke" },
+  },
+  // publish_3d_scene only writes static HTML to praetor-out/scenes.
+  {
+    name: "publish_3d_scene",
+    input: { id: "smoke-test", glbUrl: "https://example.com/model.glb", title: "Smoke" },
+  },
+  // generate_3d_model against the mock backend — no network calls.
+  {
+    name: "generate_3d_model",
+    input: { prompt: "smoke test cube", backend: "mock", detail: "draft" },
+  },
 ];
 
 let okCount = 0;
