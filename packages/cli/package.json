@@ -33,10 +33,10 @@
     "yaml": "^2.5.0"
   },
   "author": "Jerry <jerry@getbizsuite.com>",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/JerryOmiagbo/praetor.git",
+    "url": "https://github.com/mnemopay/praetor.git",
     "directory": "packages/cli"
   },
   "publishConfig": {

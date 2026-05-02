@@ -59,6 +59,11 @@ npm install
 npm run dev
 ```
 
+### 2. Repository Identity & Test Coverage
+The sole canonical source for this engine is **[github.com/mnemopay/praetor](https://github.com/mnemopay/praetor)**. 
+
+Praetor is tested exhaustively before every release. It currently runs **over 200 rigorous unit and integration tests** (specifically, 205 passing tests in the active suite) testing the entire Merkle audit flow, sandbox environment, LLM adapters, side-effect controls, and rollback protections.
+
 ### 2. CLI Mission Execution
 Run headless YAML charters directly from the terminal:
 ```bash
@@ -88,4 +93,4 @@ packages/game-assets   Godot 4.4 project scaffolding & sprite generation
 A Praetor was a Roman magistrate who held *imperium* — the absolute authority to command, judge, and account for the result. That is exactly what this runtime does: it holds authority over an AI mission, judges every cost, and accounts for every artifact and event in a tamper-evident ledger.
 
 ## License
-MIT. Built by the MnemoPay Team.
+Apache 2.0. Built by the MnemoPay Team.

@@ -1,6 +1,7 @@
 export interface CharterBudget {
   maxUsd: number;
   approvalThresholdUsd: number;
+  perToolMaxUsd?: number;
 }
 
 export type CharterRole =

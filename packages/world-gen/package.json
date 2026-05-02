@@ -17,10 +17,10 @@
   "homepage": "https://praetor.mnemopay.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/JerryOmiagbo/praetor.git",
+    "url": "https://github.com/mnemopay/praetor.git",
     "directory": "packages/world-gen"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

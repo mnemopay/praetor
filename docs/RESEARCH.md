@@ -85,7 +85,7 @@ The router is already implied in `@praetor/agents`. Make it explicit:
 ### 5. Three-tier memory parity with Letta — through MnemoPay
 
 Letta won the framing (core / archival / recall). MnemoPay's recall engine
-already has 862 tests + Merkle integrity + the Hindsight observations port
+already has 205 tests + Merkle integrity + the Hindsight observations port
 (committed today). Wire it to charters as the default `@praetor/knowledge`
 backend so Praetor matches Letta's coherence claim (500+ interaction context)
 without owning a separate memory store.

@@ -20,5 +20,11 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - name: Dependency Vulnerability Scan
+        run: npm audit --audit-level=high
       - run: npm run build
       - run: npm test
+      - name: Metadata Coverage Gate
+        run: node scripts/check-metadata.mjs
+      - name: Live Smoke Tests (Dry-Run)
+        run: node scripts/smoke-test.mjs

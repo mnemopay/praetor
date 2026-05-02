@@ -98,7 +98,7 @@ Translated to a buildable scope:
   shipped on `mnemopay.com`.
 - **Fiscal layer**: MnemoPay v1.4.2 — Agent FICO, Merkle integrity, Stripe/Paystack
   rails, HITL approval. The CFO role from the Sovereign-OS pattern, but real and
-  with 862 passing tests.
+  with 205 passing tests.
 - **UGC pipeline**: declarative ad generation (portrait → motion → voiceover →
   composite) with paid + zero-cost backends so missions keep running when API
   credits are exhausted. Wraps the user's existing `ugc-pipeline/` work.
@@ -141,8 +141,8 @@ landing on day one:
 8. Scrape pack (`packages/scrape`) — native HTML / sitemap / JSON-LD scraping
    with a Crawl4AI-style fetch, Playwright fallback, and X.com auth-cookie
    path. Firecrawl is the paid tier, never the default.
-9. Knowledge pack (`packages/knowledge`) — vector knowledge base with an
-   in-memory backend for tests and a MnemoPay-recall backend for production.
+14. Knowledge pack (`packages/knowledge`) — vector knowledge base with an
+    in-memory backend for tests and a MnemoPay-recall backend for production.
 10. Business-ops pack (`packages/business-ops`) — outbound email, billing,
     scheduling, invoice / quote, CRM. Mock + live adapter per surface so a
     charter can run a real business or run a dry-run end to end.

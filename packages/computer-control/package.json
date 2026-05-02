@@ -11,5 +11,10 @@
   "dependencies": {
     "@praetor/tools": "*",
     "@praetor/core": "*"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mnemopay/praetor.git"
   }
 }

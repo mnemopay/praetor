@@ -22,10 +22,10 @@
     "marked": "^18.0.2"
   },
   "author": "Jerry <jerry@getbizsuite.com>",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/JerryOmiagbo/praetor.git",
+    "url": "https://github.com/mnemopay/praetor.git",
     "directory": "packages/dashboard"
   },
   "publishConfig": {

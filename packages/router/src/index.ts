@@ -142,11 +142,46 @@ export class LlmRouter {
     return candidates[0];
   }
 
-  async chat(req: ChatRequest, route: RouteRequirements): Promise<ChatResponse> {
-    const card = this.pick(route);
+  async chat(req: ChatRequest, route: RouteRequirements, budgetRemainingUsd?: number): Promise<ChatResponse> {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const crypto = await import("crypto");
+
+    // Open-weight fallback if budget is low (< $0.10)
+    let finalRoute = { ...route };
+    if (budgetRemainingUsd !== undefined && budgetRemainingUsd < 0.10) {
+      finalRoute.sovereign = true;
+      finalRoute.maxUsdPer1K = 1.0;
+    }
+
+    const card = this.pick(finalRoute);
     const provider = this.providers.get(card.provider);
     if (!provider) throw new Error(`router: provider '${card.provider}' not registered for model '${card.id}'`);
-    return provider.chat(card.id, req);
+
+    // Deterministic Cache Layer
+    const reqDigest = crypto.createHash("sha256").update(JSON.stringify({ model: card.id, req })).digest("hex");
+    const cacheDir = path.resolve(process.cwd(), ".praetor", "cache", "llm");
+    const cacheFile = path.join(cacheDir, `${reqDigest}.json`);
+    
+    try {
+      const cached = await fs.readFile(cacheFile, "utf8");
+      const parsed = JSON.parse(cached) as ChatResponse;
+      // Return cached with 0 cost to save budget
+      return { ...parsed, costUsd: 0 };
+    } catch {
+      // Cache miss, proceed to network
+    }
+
+    const res = await provider.chat(card.id, req);
+
+    try {
+      await fs.mkdir(cacheDir, { recursive: true });
+      await fs.writeFile(cacheFile, JSON.stringify(res), "utf8");
+    } catch {
+      // Ignore cache write errors
+    }
+
+    return res;
   }
 }
 

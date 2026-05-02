@@ -91,7 +91,8 @@ export class NativePraetorEngine implements AgentAdapter {
 
       const r = await this.router.chat(
         { messages, maxTokens: 1024, tools: availableTools.length > 0 ? availableTools : undefined },
-        this.route
+        this.route,
+        input.budgetUsd - spentUsd
       );
       spentUsd += r.costUsd;
 
@@ -165,6 +166,7 @@ export class LlmAgent implements AgentAdapter {
         maxTokens: 256,
       },
       this.route,
+      input.budgetUsd
     );
     if (r.costUsd > input.budgetUsd) {
       throw new Error(`LlmAgent: cost ${r.costUsd.toFixed(4)} exceeds budget ${input.budgetUsd}`);

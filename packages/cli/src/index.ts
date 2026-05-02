@@ -112,6 +112,9 @@ function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAud
   const holds = new Map<string, string>();
   const fiscal: FiscalGate = {
     async approve(call) {
+      if (charter.budget.perToolMaxUsd !== undefined && call.estUsd > charter.budget.perToolMaxUsd) {
+        throw new Error(`Tool '${call.tool}' estimated cost (${call.estUsd}) exceeds perToolMaxUsd (${charter.budget.perToolMaxUsd})`);
+      }
       if (call.estUsd > 0) {
         const { holdId } = await payments.reserve(call.estUsd);
         holds.set(call.tool, holdId);

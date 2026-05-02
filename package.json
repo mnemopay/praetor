@@ -25,5 +25,9 @@
     "protobufjs": "^7.5.5",
     "esbuild": "^0.25.0"
   },
-  "license": "MIT"
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mnemopay/praetor.git"
+  }
 }
