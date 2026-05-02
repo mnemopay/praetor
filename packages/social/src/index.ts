@@ -9,6 +9,15 @@ export const post_x_tweet = {
     required: ["content"]
   },
   costUsd: 0.01,
+  metadata: {
+    origin: "mock",
+    capability: "social_x_post",
+    risk: ["reputation", "external_publish"],
+    approval: "always",
+    sandbox: "remote-provider",
+    production: "stub",
+    costEffective: true,
+  },
   execute: async (args: any) => {
     if (!process.env.X_API_KEY) {
       return { ok: true, mocked: true, message: `[MOCK] X_API_KEY not set. Would have tweeted: "${args.content}"` };
@@ -29,6 +38,15 @@ export const post_tiktok_video = {
     required: ["videoPath", "caption"]
   },
   costUsd: 0.05,
+  metadata: {
+    origin: "mock",
+    capability: "social_tiktok_post",
+    risk: ["reputation", "external_publish"],
+    approval: "always",
+    sandbox: "remote-provider",
+    production: "stub",
+    costEffective: true,
+  },
   execute: async (args: any) => {
     if (!process.env.TIKTOK_API_KEY) {
       return { ok: true, mocked: true, message: `[MOCK] TIKTOK_API_KEY not set. Would have uploaded ${args.videoPath} with caption: "${args.caption}"` };
@@ -49,6 +67,15 @@ export const schedule_cron_job = {
     required: ["cronExpression", "charterPath"]
   },
   costUsd: 0,
+  metadata: {
+    origin: "mock",
+    capability: "mission_schedule",
+    risk: ["external_publish"],
+    approval: "on-side-effect",
+    sandbox: "none",
+    production: "stub",
+    costEffective: true,
+  },
   execute: async (args: any) => {
     // In a real environment, this would write to a crontab or database queue.
     return { 

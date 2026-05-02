@@ -5,6 +5,8 @@ import {
   stripHtml,
   extractReadableText,
   extractPageEvidence,
+  parseRobotsTxt,
+  evaluateRobots,
   xCookie,
   Scraper,
   FetchAdapter,
@@ -37,6 +39,18 @@ describe("Praetor scrape pack", () => {
       "https://praetor.dev/a",
       "https://praetor.dev/b",
     ]);
+  });
+
+  it("parses robots.txt and evaluates crawl decisions", () => {
+    const policy = parseRobotsTxt(`
+      User-agent: *
+      Disallow: /private
+      Allow: /private/public
+      Crawl-delay: 3
+    `);
+    expect(evaluateRobots("https://praetor.dev/docs", policy)).toMatchObject({ allowed: true, crawlDelaySeconds: 3 });
+    expect(evaluateRobots("https://praetor.dev/private/secret", policy)).toMatchObject({ allowed: false, matchedRule: "/private" });
+    expect(evaluateRobots("https://praetor.dev/private/public/page", policy)).toMatchObject({ allowed: true, matchedRule: "/private/public" });
   });
 
   it("strips HTML tags + decodes entities", () => {

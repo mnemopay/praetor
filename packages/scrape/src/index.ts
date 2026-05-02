@@ -54,6 +54,19 @@ export interface PageEvidence {
   contentHash: string;
 }
 
+export interface RobotsPolicy {
+  userAgent: string;
+  allow: string[];
+  disallow: string[];
+  crawlDelaySeconds?: number;
+}
+
+export interface RobotsDecision {
+  allowed: boolean;
+  matchedRule?: string;
+  crawlDelaySeconds?: number;
+}
+
 export interface ScrapeAdapter {
   name: ScrapeBackend;
   fetch: (req: ScrapeRequest) => Promise<ScrapeResult>;
@@ -383,6 +396,64 @@ export function extractSitemapLocs(xml: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(xml))) out.push(m[1].trim());
   return out;
+}
+
+export function parseRobotsTxt(txt: string, userAgent = "*"): RobotsPolicy {
+  const groups: RobotsPolicy[] = [];
+  let current: RobotsPolicy | null = null;
+  for (const raw of txt.split(/\r?\n/)) {
+    const line = raw.replace(/#.*/, "").trim();
+    if (!line) continue;
+    const idx = line.indexOf(":");
+    if (idx < 0) continue;
+    const key = line.slice(0, idx).trim().toLowerCase();
+    const value = line.slice(idx + 1).trim();
+    if (key === "user-agent") {
+      current = { userAgent: value.toLowerCase(), allow: [], disallow: [] };
+      groups.push(current);
+      continue;
+    }
+    if (!current) continue;
+    if (key === "allow") current.allow.push(value);
+    else if (key === "disallow") current.disallow.push(value);
+    else if (key === "crawl-delay") {
+      const n = Number(value);
+      if (Number.isFinite(n) && n >= 0) current.crawlDelaySeconds = n;
+    }
+  }
+  const ua = userAgent.toLowerCase();
+  return groups.find((g) => g.userAgent === ua) ?? groups.find((g) => g.userAgent === "*") ?? { userAgent: "*", allow: [], disallow: [] };
+}
+
+export function evaluateRobots(url: string, policy: RobotsPolicy): RobotsDecision {
+  let path = "/";
+  try {
+    const u = new URL(url);
+    path = `${u.pathname}${u.search}`;
+  } catch {
+    path = url.startsWith("/") ? url : `/${url}`;
+  }
+  const rules = [
+    ...policy.allow.map((rule) => ({ rule, allowed: true })),
+    ...policy.disallow.map((rule) => ({ rule, allowed: false })),
+  ].filter((r) => r.rule !== "");
+  let best: { rule: string; allowed: boolean } | undefined;
+  for (const r of rules) {
+    if (robotsRuleMatches(path, r.rule) && (!best || r.rule.length > best.rule.length)) best = r;
+  }
+  return {
+    allowed: best?.allowed ?? true,
+    matchedRule: best?.rule,
+    crawlDelaySeconds: policy.crawlDelaySeconds,
+  };
+}
+
+function robotsRuleMatches(path: string, rule: string): boolean {
+  const escaped = rule
+    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\\\$/g, "$");
+  return new RegExp(`^${escaped}`).test(path);
 }
 
 /**

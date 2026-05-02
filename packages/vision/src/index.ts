@@ -13,6 +13,15 @@ export const capture_screen = {
     required: []
   },
   costUsd: 0,
+  metadata: {
+    origin: "adapter",
+    capability: "computer_screen_capture",
+    risk: ["browser", "filesystem"],
+    approval: "always",
+    sandbox: "host",
+    production: "needs-live-test",
+    costEffective: true,
+  },
   execute: async () => {
     try {
       const img = await screenshot({ format: 'png' });
@@ -38,6 +47,15 @@ export const analyze_image = {
     required: ["path", "prompt"]
   },
   costUsd: 0.05,
+  metadata: {
+    origin: "mock",
+    capability: "vision_image_analyze",
+    risk: ["spend"],
+    approval: "on-cost",
+    sandbox: "remote-provider",
+    production: "stub",
+    costEffective: true,
+  },
   execute: async (args: any) => {
     // In V1, this returns a mock analysis until the Router is upgraded to pass multi-modal Base64 tokens.
     // The user can inject their preferred Vision API (OpenRouter/Anthropic) here.
