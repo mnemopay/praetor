@@ -26,6 +26,10 @@ export interface ScrapeRequest {
   timeoutMs?: number;
   /** Force a particular User-Agent string. */
   userAgent?: string;
+  /** Skip robots.txt enforcement for explicitly authorized/internal fetches. */
+  ignoreRobots?: boolean;
+  /** Minimum delay between requests to the same host. Defaults to 250ms. */
+  crawlDelayMs?: number;
 }
 
 export interface ScrapeResult {
@@ -41,6 +45,8 @@ export interface ScrapeResult {
   text?: string;
   /** Native Praetor evidence extracted from HTML responses. */
   evidence?: PageEvidence;
+  /** Crawl policy applied before fetching. */
+  crawl?: CrawlDecision;
 }
 
 export interface PageEvidence {
@@ -65,6 +71,11 @@ export interface RobotsDecision {
   allowed: boolean;
   matchedRule?: string;
   crawlDelaySeconds?: number;
+}
+
+export interface CrawlDecision extends RobotsDecision {
+  robotsUrl?: string;
+  delayedMs?: number;
 }
 
 export interface ScrapeAdapter {
@@ -328,7 +339,12 @@ export class PlaywrightMcpAdapter implements ScrapeAdapter {
  */
 export class Scraper {
   private readonly adapters: Record<ScrapeBackend, ScrapeAdapter>;
-  constructor(adapters: Partial<Record<ScrapeBackend, ScrapeAdapter>> = {}) {
+  private readonly robotsCache = new Map<string, RobotsPolicy>();
+  private readonly lastRequestAt = new Map<string, number>();
+  constructor(
+    adapters: Partial<Record<ScrapeBackend, ScrapeAdapter>> = {},
+    private readonly opts: { fetchImpl?: typeof fetch; defaultCrawlDelayMs?: number; clock?: () => number; sleep?: (ms: number) => Promise<void> } = {},
+  ) {
     this.adapters = {
       fetch: adapters.fetch ?? new FetchAdapter(),
       playwright: adapters.playwright ?? new PlaywrightAdapter(),
@@ -339,7 +355,21 @@ export class Scraper {
   }
   async scrape(req: ScrapeRequest): Promise<ScrapeResult> {
     const backend = req.backend ?? "fetch";
-    return this.adapters[backend].fetch(req);
+    const crawl = await this.prepareCrawl(req);
+    if (!crawl.allowed) {
+      return {
+        url: req.url,
+        status: 999,
+        contentType: "text/plain",
+        body: `Blocked by robots.txt rule: ${crawl.matchedRule ?? "(none)"}`,
+        fetchedAt: new Date().toISOString(),
+        backend,
+        text: "",
+        crawl,
+      };
+    }
+    const result = await this.adapters[backend].fetch(req);
+    return { ...result, crawl };
   }
 
   /**
@@ -366,6 +396,61 @@ export class Scraper {
     }
     return [...out];
   }
+
+  private async prepareCrawl(req: ScrapeRequest): Promise<CrawlDecision> {
+    const host = hostKey(req.url);
+    if (!host || req.ignoreRobots) {
+      const delayedMs = await this.applyHostDelay(host, req.crawlDelayMs);
+      return { allowed: true, delayedMs };
+    }
+    const robotsUrl = new URL("/robots.txt", req.url).toString();
+    const policy = await this.getRobotsPolicy(robotsUrl, req.userAgent ?? DEFAULT_UA);
+    const decision = evaluateRobots(req.url, policy);
+    const delayMs = req.crawlDelayMs ?? (decision.crawlDelaySeconds !== undefined ? decision.crawlDelaySeconds * 1000 : undefined);
+    const delayedMs = decision.allowed ? await this.applyHostDelay(host, delayMs) : 0;
+    return { ...decision, robotsUrl, delayedMs };
+  }
+
+  private async getRobotsPolicy(robotsUrl: string, userAgent: string): Promise<RobotsPolicy> {
+    const key = `${robotsUrl}|${userAgent}`;
+    const cached = this.robotsCache.get(key);
+    if (cached) return cached;
+    try {
+      const f = this.opts.fetchImpl ?? globalThis.fetch;
+      const res = await f(robotsUrl, { headers: { "user-agent": userAgent, accept: "text/plain,*/*;q=0.8" } });
+      const txt = res.ok ? await res.text() : "";
+      const policy = parseRobotsTxt(txt, userAgent);
+      this.robotsCache.set(key, policy);
+      return policy;
+    } catch {
+      const policy = parseRobotsTxt("", userAgent);
+      this.robotsCache.set(key, policy);
+      return policy;
+    }
+  }
+
+  private async applyHostDelay(host: string, explicitDelayMs?: number): Promise<number> {
+    if (!host) return 0;
+    const delayMs = explicitDelayMs ?? this.opts.defaultCrawlDelayMs ?? 250;
+    const now = this.opts.clock?.() ?? Date.now();
+    const last = this.lastRequestAt.get(host) ?? 0;
+    const wait = Math.max(0, last + delayMs - now);
+    if (wait > 0) await (this.opts.sleep ?? sleep)(wait);
+    this.lastRequestAt.set(host, (this.opts.clock?.() ?? Date.now()));
+    return wait;
+  }
+}
+
+function hostKey(url: string): string {
+  try {
+    return new URL(url).host.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

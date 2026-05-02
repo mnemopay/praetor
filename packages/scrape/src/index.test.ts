@@ -167,9 +167,63 @@ describe("Praetor scrape pack", () => {
         backend: "fetch",
       };
     };
-    const s = new Scraper({ fetch: fakeFetch });
+    const s = new Scraper({ fetch: fakeFetch }, { fetchImpl: (async () => new Response("", { status: 404 })) as unknown as typeof fetch });
     const r = await s.scrape({ url: "https://praetor.dev/x" });
     expect(r.status).toBe(200);
     expect(calls).toEqual(["https://praetor.dev/x"]);
+  });
+
+  it("scrape() blocks URLs disallowed by robots.txt before adapter fetch", async () => {
+    let adapterCalled = false;
+    const fakeFetch = new FetchAdapter();
+    fakeFetch.fetch = async (req) => {
+      adapterCalled = true;
+      return {
+        url: req.url,
+        status: 200,
+        contentType: "text/html",
+        body: "should not happen",
+        fetchedAt: new Date().toISOString(),
+        backend: "fetch",
+      };
+    };
+    const robotsFetch = (async () => new Response("User-agent: *\nDisallow: /private", { status: 200 })) as unknown as typeof fetch;
+    const s = new Scraper({ fetch: fakeFetch }, { fetchImpl: robotsFetch });
+    const r = await s.scrape({ url: "https://praetor.dev/private/secret" });
+    expect(r.status).toBe(999);
+    expect(r.crawl?.allowed).toBe(false);
+    expect(adapterCalled).toBe(false);
+  });
+
+  it("scrape() applies per-host crawl delay without sleeping in tests", async () => {
+    let now = 1000;
+    const sleeps: number[] = [];
+    const fakeFetch = new FetchAdapter();
+    fakeFetch.fetch = async (req) => ({
+      url: req.url,
+      status: 200,
+      contentType: "text/html",
+      body: "<p>ok</p>",
+      fetchedAt: new Date().toISOString(),
+      backend: "fetch",
+    });
+    const robotsFetch = (async () => new Response("", { status: 404 })) as unknown as typeof fetch;
+    const s = new Scraper(
+      { fetch: fakeFetch },
+      {
+        fetchImpl: robotsFetch,
+        defaultCrawlDelayMs: 500,
+        clock: () => now,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+          now += ms;
+        },
+      },
+    );
+    await s.scrape({ url: "https://praetor.dev/a" });
+    now += 100;
+    const r = await s.scrape({ url: "https://praetor.dev/b" });
+    expect(sleeps).toEqual([400]);
+    expect(r.crawl?.delayedMs).toBe(400);
   });
 });
