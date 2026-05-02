@@ -17,6 +17,7 @@ import { getPluginRegistry, validatePluginName } from "./marketplace.js";
 import { newMissionId, startMissionRun } from "./runner.js";
 import { mountActivityPersistence } from "./activity.js";
 import { createActivityRouter } from "./routes/activity.js";
+import { getToolCatalog } from "./tools.js";
 
 export function createApp() {
   const app = express();
@@ -54,6 +55,29 @@ export function createApp() {
   // the per-route query-token auth path can run.
   mountActivityPersistence(getMissionOwner);
   app.use("/api/v1", createActivityRouter());
+
+  app.get("/api/v1/artifacts", artifactQueryTokenAuth, authMiddleware, (req: AuthedRequest, res) => {
+    const rawPath = typeof req.query.path === "string" ? req.query.path : "";
+    const target = resolve(rawPath);
+    const allowedRoots = [
+      resolve(env.repoRoot, "praetor-out"),
+      resolve(env.repoRoot, ".praetor"),
+    ];
+    const isAllowed = allowedRoots.some((root) => target === root || target.startsWith(root + "\\"));
+    if (!rawPath || !isAllowed) {
+      res.status(400).json({ ok: false, error: "invalid artifact path" });
+      return;
+    }
+    if (!existsSync(target)) {
+      res.status(404).json({ ok: false, error: "artifact not found" });
+      return;
+    }
+    if (statSync(target).isDirectory()) {
+      res.status(400).json({ ok: false, error: "artifact is a directory" });
+      return;
+    }
+    res.sendFile(target);
+  });
 
   app.use("/api/v1", authMiddleware);
 
@@ -102,6 +126,10 @@ export function createApp() {
   app.get("/api/v1/marketplace/plugins", async (req: AuthedRequest, res) => {
     const installed = await listInstalledPlugins(req.user!.id);
     res.json({ ok: true, plugins: getPluginRegistry(), installed });
+  });
+
+  app.get("/api/v1/tools", async (_req: AuthedRequest, res) => {
+    res.json(await getToolCatalog());
   });
 
   app.post("/api/v1/marketplace/install", async (req: AuthedRequest, res) => {
@@ -173,4 +201,11 @@ export function createApp() {
   });
 
   return app;
+}
+
+function artifactQueryTokenAuth(req: express.Request, _res: express.Response, next: () => void): void {
+  if (!req.headers.authorization && typeof req.query.token === "string" && req.query.token) {
+    (req.headers as Record<string, string>).authorization = `Bearer ${req.query.token}`;
+  }
+  next();
 }

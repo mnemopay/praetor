@@ -6,9 +6,11 @@ import { randomUUID } from "node:crypto";
 import { stringify } from "yaml";
 import { env } from "./env.js";
 import { appendMissionLog, updateMissionStatus } from "./db.js";
-import type { Charter } from "@praetor/core";
+import type { ActivityEvent, Charter } from "@praetor/core";
+import { getActivityBus } from "./activity.js";
 
 export const activeMissionPids = new Map<string, number>();
+const ACTIVITY_PREFIX = "::praetor-activity::";
 
 export function toYaml(charter: Charter): string {
   return stringify({
@@ -26,11 +28,17 @@ export async function startMissionRun(missionId: string, charter: Charter): Prom
   await writeFile(charterPath, toYaml(charter), "utf-8");
 
   const logStream = createWriteStream(logPath, { flags: "a" });
-  const child = spawn("npx", ["praetor", "run", charterPath], { cwd: env.repoRoot, shell: true });
+  const child = spawn("npx", ["praetor", "run", charterPath], {
+    cwd: env.repoRoot,
+    shell: true,
+    env: { ...process.env, PRAETOR_MISSION_ID: missionId },
+  });
   activeMissionPids.set(missionId, child.pid ?? 0);
+  let stdoutCarry = "";
 
   child.stdout.on("data", async (chunk: Buffer) => {
     const text = chunk.toString();
+    stdoutCarry = bridgeActivityLines(missionId, stdoutCarry + text);
     logStream.write(text);
     await appendMissionLog(missionId, text);
   });
@@ -50,4 +58,33 @@ export async function startMissionRun(missionId: string, charter: Charter): Prom
 
 export function newMissionId(): string {
   return randomUUID();
+}
+
+function bridgeActivityLines(missionId: string, text: string): string {
+  const lines = text.split(/\r?\n/);
+  const carry = lines.pop() ?? "";
+  for (const line of lines) {
+    if (!line.startsWith(ACTIVITY_PREFIX)) continue;
+    try {
+      const event = JSON.parse(line.slice(ACTIVITY_PREFIX.length)) as ActivityEvent;
+      if (event.missionId !== missionId) continue;
+      getActivityBus().publish(rewriteArtifactUrl(event));
+    } catch {
+      // Ignore malformed activity side-band lines; normal mission logging continues.
+    }
+  }
+  return carry;
+}
+
+function rewriteArtifactUrl(event: ActivityEvent): ActivityEvent {
+  if (event.kind !== "artifact.done") return event;
+  const url = String(event.url ?? "");
+  if (/^https?:\/\//i.test(url) || url.startsWith("/api/")) return event;
+  const abs = resolve(url);
+  const repoRoot = resolve(env.repoRoot);
+  if (!abs.startsWith(repoRoot)) return event;
+  return {
+    ...event,
+    url: `/api/v1/artifacts?path=${encodeURIComponent(abs)}`,
+  };
 }

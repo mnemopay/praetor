@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",
-    "lint": "tsc -b --noEmit",
+    "lint": "tsc -b",
     "praetor": "node packages/cli/dist/index.js"
   },
   "devDependencies": {

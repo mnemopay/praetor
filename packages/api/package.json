@@ -12,7 +12,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@praetor/cli": "*",
     "@praetor/core": "*",
+    "@praetor/tools": "*",
     "@supabase/supabase-js": "^2.57.4",
     "express": "^5.1.0",
     "yaml": "^2.5.0"

@@ -25,6 +25,18 @@ const server = createServer(async (req, res) => {
     json(res, 200, { ok: true });
     return;
   }
+  if (req.method === "GET" && req.url === "/api/v1/tools") {
+    try {
+      const { getToolCatalog } = await import(resolve(repoRoot, "packages", "api", "dist", "tools.js"));
+      json(res, 200, await getToolCatalog());
+    } catch (error) {
+      json(res, 503, {
+        ok: false,
+        error: `Tool catalog unavailable. Run npm run build first. ${(error?.message ?? String(error)).slice(0, 240)}`,
+      });
+    }
+    return;
+  }
   if (req.method === "POST" && req.url === "/api/execute") {
     const body = await readBody(req);
     let payload;
@@ -172,7 +184,7 @@ function readBody(req) {
 
 function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
 }
 

@@ -5,9 +5,33 @@ import DOMPurify from "dompurify";
 import { ActivityPanel, type ActivityEvent } from "./components/ActivityPanel.js";
 import { openActivityStream, type ActivityStreamHandle } from "./eventStream.js";
 
-type Route = "chat" | "missions" | "audit" | "billing" | "marketplace" | "world";
+type Route = "chat" | "missions" | "audit" | "billing" | "marketplace" | "tools" | "world";
 type Mission = { id: string; status: string; goal: string; created_at: string };
 type Plugin = { name: string; version: string; provider: string; description: string };
+type ToolMetadata = {
+  origin: "native" | "adapter" | "mock" | "experimental";
+  capability: string;
+  risk: string[];
+  approval: string;
+  sandbox: string;
+  production: "ready" | "needs-live-test" | "needs-native-rewrite" | "stub";
+  costEffective?: boolean;
+  note?: string;
+};
+type ToolCatalogItem = {
+  name: string;
+  description: string;
+  tags: string[];
+  allowedRoles: string[];
+  costUsd: number;
+  metadata: ToolMetadata | null;
+};
+type ToolCatalogReport = {
+  total: number;
+  byOrigin: Record<string, number>;
+  byState: Record<string, number>;
+  missingMetadata: string[];
+};
 type WorldScene = {
   id: string;
   title: string;
@@ -169,6 +193,7 @@ function render() {
         ${tabButton("chat", "Chat")}
         ${tabButton("missions", "Missions")}
         ${tabButton("audit", "Audit")}
+        ${tabButton("tools", "Tools")}
         ${tabButton("world", "World")}
         ${tabButton("billing", "Billing")}
         ${tabButton("marketplace", "Marketplace")}
@@ -301,6 +326,7 @@ async function renderRoute() {
     case "chat": return renderChat();
     case "missions": return renderMissions();
     case "audit": return renderAudit();
+    case "tools": return renderTools();
     case "billing": return renderBilling();
     case "marketplace": return renderMarketplace();
     case "world": return renderWorld();
@@ -415,6 +441,7 @@ function renderChat() {
 /** Subscribe the activity panel to a mission: hydrate from history then open SSE. */
 function attachActivity(missionId: string): void {
   if (!session || !activityPanel) return;
+  window.localStorage.setItem("praetor.artifactToken", session.access_token);
   if (activityMissionId === missionId && activityStream) return;
   // Tear down previous stream if mission changed.
   activityStream?.close();
@@ -631,6 +658,108 @@ async function renderBilling() {
 // Browses 3D models, gaussian-splat worlds, and SuperSplat-edited scenes
 // produced by @praetor/world-gen tools (generate_3d_model, generate_3d_world,
 // publish_3d_scene). Embeds <model-viewer> for GLBs and Spark 2.0 for splats.
+
+// Tools
+
+async function renderTools() {
+  const view = document.getElementById("view");
+  if (!view) return;
+  view.innerHTML = `<p class="card-hint">Loading tool governance...</p>`;
+  try {
+    const res = await authedFetch("/api/v1/tools");
+    const payload = await res.json();
+    if (!res.ok || !payload.ok) {
+      view.innerHTML = `<p class="card-hint error">Failed to load tools: ${escapeHtml(payload.error ?? res.statusText)}</p>`;
+      return;
+    }
+    const tools = (payload.tools ?? []) as ToolCatalogItem[];
+    const report = payload.report as ToolCatalogReport;
+    view.innerHTML = `
+      <div class="stack">
+        <div class="tool-toolbar">
+          <div>
+            <p class="card-label">Tool governance</p>
+            <p class="card-hint">Live registry metadata for origin, readiness, risk, approval gates, sandbox, and cost posture.</p>
+          </div>
+          <button class="btn-secondary" id="refreshTools">Refresh</button>
+        </div>
+        <div class="tool-summary">
+          ${metricCard("Total", String(report.total))}
+          ${metricCard("Native", String(report.byOrigin?.native ?? 0))}
+          ${metricCard("Ready", String(report.byState?.ready ?? 0))}
+          ${metricCard("Needs work", String((report.byState?.["needs-live-test"] ?? 0) + (report.byState?.["needs-native-rewrite"] ?? 0) + (report.byState?.stub ?? 0)))}
+          ${metricCard("Missing metadata", String(report.missingMetadata?.length ?? 0))}
+        </div>
+        ${report.missingMetadata?.length ? `
+          <div class="card tool-warning">
+            <p class="card-label">Missing metadata</p>
+            <p class="card-hint">${escapeHtml(report.missingMetadata.join(", "))}</p>
+          </div>
+        ` : ""}
+        <div class="tool-grid">
+          ${tools.map(renderToolCard).join("")}
+        </div>
+      </div>
+    `;
+    document.getElementById("refreshTools")?.addEventListener("click", () => void renderTools());
+  } catch (err) {
+    view.innerHTML = `<p class="card-hint error">Network error: ${escapeHtml((err as Error).message)}</p>`;
+  }
+}
+
+function metricCard(label: string, value: string): string {
+  return `
+    <div class="card tool-metric">
+      <p class="card-label">${escapeHtml(label)}</p>
+      <p class="card-value">${escapeHtml(value)}</p>
+    </div>
+  `;
+}
+
+function renderToolCard(tool: ToolCatalogItem): string {
+  const meta = tool.metadata;
+  const state = meta?.production ?? "missing";
+  const origin = meta?.origin ?? "unknown";
+  const risks = meta?.risk?.length ? meta.risk.join(", ") : "none";
+  const roles = tool.allowedRoles.length ? tool.allowedRoles.join(", ") : "all roles";
+  const cost = tool.costUsd > 0 ? `$${tool.costUsd.toFixed(4)}` : "free/local";
+  return `
+    <article class="card tool-card">
+      <div>
+        <p class="card-label">${escapeHtml(origin)} / ${escapeHtml(state)}</p>
+        <p class="tool-name">${escapeHtml(tool.name)}</p>
+        <p class="card-hint">${escapeHtml(tool.description)}</p>
+      </div>
+      <div class="tool-badges">
+        <span class="tool-badge ${toolBadgeClass(state)}">${escapeHtml(state)}</span>
+        <span class="tool-badge">${escapeHtml(meta?.sandbox ?? "unknown sandbox")}</span>
+        <span class="tool-badge">${escapeHtml(meta?.approval ?? "unknown approval")}</span>
+        <span class="tool-badge">${escapeHtml(cost)}</span>
+      </div>
+      <dl class="tool-facts">
+        <div><dt>Capability</dt><dd>${escapeHtml(meta?.capability ?? "missing")}</dd></div>
+        <div><dt>Risk</dt><dd>${escapeHtml(risks)}</dd></div>
+        <div><dt>Roles</dt><dd>${escapeHtml(roles)}</dd></div>
+        ${meta?.costEffective ? `<div><dt>Cost posture</dt><dd>cost effective</dd></div>` : ""}
+      </dl>
+      ${meta?.note ? `<p class="tool-note">${escapeHtml(meta.note)}</p>` : ""}
+      ${tool.tags.length ? `<p class="tool-tags">${escapeHtml(tool.tags.join(" / "))}</p>` : ""}
+    </article>
+  `;
+}
+
+function toolBadgeClass(state: string): string {
+  switch (state) {
+    case "ready": return "ready";
+    case "needs-live-test": return "warn";
+    case "needs-native-rewrite":
+    case "stub":
+    case "missing":
+      return "err";
+    default:
+      return "";
+  }
+}
 
 async function renderWorld() {
   const view = document.getElementById("view");

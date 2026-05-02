@@ -11,7 +11,7 @@ export type ActivityEvent =
   | { kind: "tool.progress"; missionId: string; eventId: string; pct?: number; status: string; ts: string }
   | { kind: "tool.end"; missionId: string; eventId: string; ok: boolean; result?: unknown; costUsd?: number; ts: string }
   | { kind: "artifact.partial"; missionId: string; artifactId: string; format: "text" | "glb" | "splat" | "image"; chunk: string; ts: string }
-  | { kind: "artifact.done"; missionId: string; artifactId: string; url: string; ts: string };
+  | { kind: "artifact.done"; missionId: string; artifactId: string; format?: "text" | "glb" | "splat" | "image"; url: string; ts: string };
 
 interface ToolRow {
   eventId: string;
@@ -110,9 +110,10 @@ export class ActivityPanel {
       case "artifact.done": {
         if (!this.artifacts.has(e.artifactId)) {
           this.artifactOrder.push(e.artifactId);
-          this.artifacts.set(e.artifactId, { artifactId: e.artifactId, format: "text", partials: [] });
+          this.artifacts.set(e.artifactId, { artifactId: e.artifactId, format: e.format ?? "text", partials: [] });
         }
         const a = this.artifacts.get(e.artifactId)!;
+        if (e.format) a.format = e.format;
         a.url = e.url;
         a.doneAt = e.ts;
         break;
@@ -151,12 +152,15 @@ export class ActivityPanel {
       const a = this.artifacts.get(id);
       if (!a) continue;
       let preview = "";
-      if (a.url && (a.format === "glb")) {
-        preview = `<a class="btn-secondary" href="${escapeAttr(a.url)}" target="_blank" rel="noopener">Open GLB ↗</a>`;
-      } else if (a.url && a.format === "splat") {
-        preview = `<a class="btn-secondary" href="${escapeAttr(a.url)}" target="_blank" rel="noopener">Open splat ↗</a>`;
-      } else if (a.url && a.format === "image") {
-        preview = `<img class="activity-artifact-img" src="${escapeAttr(a.url)}" alt="${escapeAttr(a.artifactId)}" />`;
+      const url = artifactUrl(a.url);
+      if (url && (a.format === "glb")) {
+        preview = `<a class="btn-secondary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open GLB</a>`;
+      } else if (url && a.format === "splat") {
+        preview = `<a class="btn-secondary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open splat</a>`;
+      } else if (url && a.format === "image") {
+        preview = `<img class="activity-artifact-img" src="${escapeAttr(url)}" alt="${escapeAttr(a.artifactId)}" />`;
+      } else if (url && a.format === "text") {
+        preview = `<a class="btn-secondary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open artifact</a>`;
       } else if (a.partials.length > 0 || a.url) {
         const text = a.partials.join("");
         preview = `<pre class="activity-artifact-text">${escapeHtml(text)}</pre>`;
@@ -193,4 +197,18 @@ function escapeHtml(s: string): string {
 
 function escapeAttr(s: string): string {
   return escapeHtml(s);
+}
+
+function artifactUrl(url?: string): string {
+  if (!url) return "";
+  if (!url.startsWith("/api/v1/artifacts")) return url;
+  try {
+    const token = window.localStorage.getItem("praetor.artifactToken");
+    if (!token) return url;
+    const next = new URL(url, window.location.origin);
+    next.searchParams.set("token", token);
+    return `${next.pathname}${next.search}`;
+  } catch {
+    return url;
+  }
 }

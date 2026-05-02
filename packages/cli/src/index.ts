@@ -10,6 +10,9 @@ import {
   MerkleAudit,
   buildArticle12Bundle,
   PolicyEngine,
+  type ActivityBus,
+  type ActivityEvent,
+  type ArtifactFormat,
   type Charter,
   type MissionResult,
 } from "@praetor/core";
@@ -37,6 +40,8 @@ import { defaultRenderer } from "@praetor/game-assets";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import type { ToolApproval, ToolOrigin, ToolProductionState, ToolRisk, ToolSandbox } from "@praetor/tools";
+
+const ACTIVITY_PREFIX = "::praetor-activity::";
 
 function loadDotenv(...candidates: string[]): void {
   for (const p of candidates) {
@@ -143,7 +148,7 @@ function toolMeta(
   return { origin, capability, risk, approval, sandbox, production, costEffective: true, note };
 }
 
-export async function buildEnhancedRegistry(charter: Charter, missionId: string, audit?: AuditSink) {
+export async function buildEnhancedRegistry(charter: Charter, missionId: string, audit?: AuditSink, activity?: ActivityBus) {
   const reg = defaultRegistry();
   const kb = defaultKnowledgeBase({ missionId });
   const design = new DesignPack();
@@ -238,6 +243,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
       mkdirSync(outDir, { recursive: true });
       const f = join(outDir, `spline-${pId}.html`);
       writeFileSync(f, html);
+      publishArtifact(activity, missionId, `design-spline-${pId}`, "text", f);
       return { success: true, message: `Landing page saved to ${f}` };
     }
   );
@@ -273,6 +279,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         const path = join(outDir, `canvas3d-${file.path}`);
         writeFileSync(path, file.contents);
         written.push(path);
+        publishArtifact(activity, missionId, `design-canvas3d-${file.path}`, "text", path);
       }
       return { success: true, message: `Canvas3D files saved to: ${written.join(", ")}` };
     }
@@ -304,7 +311,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
       metadata: toolMeta("adapter", "world_gen_model", ["network", "spend", "filesystem"], "on-cost", "remote-provider", "needs-live-test")
     },
     async (args) => {
-      const result = await worldGenModel(args as any, { selector: wgSelector, missionId });
+      const result = await worldGenModel(args as any, { selector: wgSelector, missionId, bus: activity });
+      publishRemoteArtifacts(activity, missionId, "generate_3d_model", result as unknown as Record<string, unknown>);
       return { success: true, ...result };
     }
   );
@@ -330,7 +338,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
       metadata: toolMeta("adapter", "world_gen_scene", ["network", "spend", "filesystem"], "on-cost", "remote-provider", "needs-live-test")
     },
     async (args) => {
-      const result = await worldGenWorld(args as any, { selector: wgSelector, missionId });
+      const result = await worldGenWorld(args as any, { selector: wgSelector, missionId, bus: activity });
+      publishRemoteArtifacts(activity, missionId, "generate_3d_world", result as unknown as Record<string, unknown>);
       return { success: true, ...result };
     }
   );
@@ -377,6 +386,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
     },
     async (args) => {
       const result = worldGenPublish({ ...(args as any), outDir: join(outDir, "scenes") });
+      publishArtifact(activity, missionId, `world-viewer-${String((args as any).id ?? "scene")}`, "text", result.viewerPath);
       return { success: true, ...result };
     }
   );
@@ -416,6 +426,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         mkdirSync(join(seoDir, p.slug), { recursive: true });
         writeFileSync(join(seoDir, p.slug, "index.html"), p.html);
       }
+      publishArtifact(activity, missionId, "seo-site-sitemap", "text", join(seoDir, "sitemap.xml"));
+      publishArtifact(activity, missionId, "seo-site-index", "text", join(seoDir, art.pages[0]?.slug ?? ".", "index.html"));
       return { success: true, message: `SEO site generated at ${seoDir}` };
     }
   );
@@ -570,6 +582,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
     },
     async (spec) => {
       const res = await games.render(spec as any);
+      publishArtifact(activity, missionId, `game-project-${String((spec as any).id ?? "project")}`, "text", res.outputDir);
       return { success: true, projectPath: res.outputDir, costUsd: res.costUsd };
     }
   );
@@ -682,6 +695,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
     },
     async ({ title, backgroundUrl }) => {
       const url = generateOgImageUrl(title as string, backgroundUrl as string | undefined);
+      publishArtifact(activity, missionId, `og-image-${slugId(title as string)}`, "image", url);
       return { success: true, imageUrl: url };
     }
   );
@@ -805,6 +819,43 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
   return reg;
 }
 
+function publishArtifact(activity: ActivityBus | undefined, missionId: string, artifactId: string, format: ArtifactFormat, url: string): void {
+  if (!activity || !missionId || !url) return;
+  activity.publish({
+    kind: "artifact.done",
+    missionId,
+    artifactId,
+    format,
+    url,
+    ts: new Date().toISOString(),
+  });
+}
+
+function publishRemoteArtifacts(activity: ActivityBus | undefined, missionId: string, prefix: string, result: Record<string, unknown>): void {
+  const glbUrl = typeof result.glbUrl === "string" ? result.glbUrl : "";
+  const spzUrl = typeof result.spzUrl === "string" ? result.spzUrl : "";
+  const splatUrl = typeof result.splatUrl === "string" ? result.splatUrl : spzUrl;
+  const thumbUrl = typeof result.thumbUrl === "string" ? result.thumbUrl : "";
+  if (glbUrl) publishArtifact(activity, missionId, `${prefix}-glb`, "glb", glbUrl);
+  if (splatUrl) publishArtifact(activity, missionId, `${prefix}-splat`, "splat", splatUrl);
+  if (thumbUrl) publishArtifact(activity, missionId, `${prefix}-thumb`, "image", thumbUrl);
+}
+
+function stdoutActivityBus(): ActivityBus {
+  return {
+    publish(e: ActivityEvent) {
+      process.stdout.write(`${ACTIVITY_PREFIX}${JSON.stringify(e)}\n`);
+    },
+    subscribe() {
+      return () => undefined;
+    },
+  };
+}
+
+function slugId(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "artifact";
+}
+
 function parseYaml(src: string): unknown {
   return parseYamlReal(src);
 }
@@ -863,7 +914,10 @@ async function cmdRun(args: string[]) {
     payments = new MockPayments();
   }
 
-  const registry = await buildEnhancedRegistry(charter, charter.name, audit);
+  const missionId = process.env.PRAETOR_MISSION_ID || charter.name;
+  const activity = stdoutActivityBus();
+  activity.publish({ kind: "milestone", missionId, text: "Mission started", ts: new Date().toISOString() });
+  const registry = await buildEnhancedRegistry(charter, missionId, audit, activity);
   const agent = pickAgent(charter, payments, audit, registry);
   if (verbose) process.stderr.write(JSON.stringify({ agent: agent.name }) + "\n");
   const result = await runMission({
@@ -872,6 +926,7 @@ async function cmdRun(args: string[]) {
     agents: { run: async (c, signal) => agent.run({ goal: c.goal, outputs: c.outputs, budgetUsd: c.budget.maxUsd, steps: c.steps, agents: c.agents, signal, role: c.agents[0]?.role }) },
     audit,
   });
+  activity.publish({ kind: "milestone", missionId, text: result.status === "ok" ? "Mission completed" : "Mission failed", ts: new Date().toISOString() });
 
   if (saveMission) {
     const record = {
