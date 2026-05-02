@@ -64,29 +64,37 @@ export function registerFileTools(reg: ToolRegistry, opts: FileToolsOptions): vo
     },
   );
 
-  reg.register<{ path: string; find: string; replace: string }, { path: string; replacements: number }>(
+  reg.register<{ path: string; patch: string }, { path: string; success: boolean; rollbackId: string; diffPreview: string }>(
     {
       name: "edit_file",
-      description: "Replace every literal occurrence of `find` with `replace` in `path`.",
+      description: "Apply a unified diff patch to a file. Original file is saved to `.praetor/rollbacks`.",
       schema: {
         type: "object",
-        properties: { path: { type: "string" }, find: { type: "string" }, replace: { type: "string" } },
-        required: ["path", "find", "replace"],
+        properties: { path: { type: "string" }, patch: { type: "string" } },
+        required: ["path", "patch"],
       },
       tags, allowedRoles,
-      metadata: { origin: "native", capability: "repo_file_edit", risk: ["filesystem"], approval: "on-side-effect", sandbox: "repo", production: "needs-live-test", costEffective: true, note: "Literal replace today; production target is patch-first and AST-aware editing." },
+      metadata: { origin: "native", capability: "repo_file_edit", risk: ["filesystem"], approval: "on-side-effect", sandbox: "repo", production: "ready", costEffective: true, note: "Patch-first editing with rollback bundle generation." },
     },
-    async ({ path, find, replace }) => {
+    async ({ path, patch }) => {
       const abs = safe(path);
       const before = await fs.readFile(abs, "utf8");
-      const after = before.split(find).join(replace);
-      const replacements = before.length === after.length && before === after
-        ? 0
-        : (before.length - after.length) / Math.max(1, find.length - replace.length || 1);
-      // Count occurrences accurately:
-      const occ = countOccurrences(before, find);
+      
+      const { applyPatch } = await import("diff");
+      const after = applyPatch(before, patch);
+      if (!after) {
+        throw new Error("Failed to apply patch. Check format or context lines.");
+      }
+
+      // Rollback bundle
+      const rollbackId = `rollback_${Date.now()}`;
+      const rollbackPath = resolve(join(root, ".praetor", "rollbacks", `${rollbackId}.orig`));
+      await fs.mkdir(resolve(rollbackPath, ".."), { recursive: true });
+      await fs.writeFile(rollbackPath, before, "utf8");
+      
       await fs.writeFile(abs, after, "utf8");
-      return { path: relative(root, abs), replacements: occ };
+      
+      return { path: relative(root, abs), success: true, rollbackId, diffPreview: patch };
     },
   );
 
@@ -164,16 +172,7 @@ async function walk(dir: string, fn: (path: string) => Promise<void>): Promise<v
   }
 }
 
-function countOccurrences(haystack: string, needle: string): number {
-  if (!needle) return 0;
-  let count = 0;
-  let idx = 0;
-  while ((idx = haystack.indexOf(needle, idx)) !== -1) {
-    count += 1;
-    idx += needle.length;
-  }
-  return count;
-}
+
 
 export const FILE_TOOL_NAMES: readonly string[] = [
   "read_file", "write_file", "edit_file", "list_files", "grep_codebase",

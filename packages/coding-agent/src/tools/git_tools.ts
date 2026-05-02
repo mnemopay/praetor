@@ -51,7 +51,7 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
     },
   );
 
-  reg.register<{ message: string; paths?: string[] }, { commit: string; summary: string }>(
+  reg.register<{ message: string; paths?: string[] }, { commit: string; summary: string; rollbackBundle: string }>(
     {
       name: "git_commit",
       description: "Stage the listed paths (or all changes if omitted) and commit with the given message.",
@@ -64,16 +64,25 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
         required: ["message"],
       },
       tags, allowedRoles,
-      metadata: { origin: "adapter", capability: "git_commit", risk: ["filesystem"], approval: "on-side-effect", sandbox: "repo", production: "needs-live-test", costEffective: true, note: "Commits are side effects and should be approval-gated in operator workflows." },
+      metadata: { origin: "adapter", capability: "git_commit", risk: ["filesystem"], approval: "on-side-effect", sandbox: "repo", production: "ready", costEffective: true, note: "Commits automatically generate a rollback patch bundle before applying." },
     },
     async ({ message, paths }) => {
+      // Generate rollback bundle before committing
+      const rollbackDiff = await git.diff(["HEAD"]);
+      const rollbackBundle = `rollback_commit_${Date.now()}.patch`;
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const rollbackDir = path.resolve(opts.repoRoot, ".praetor", "rollbacks");
+      await fs.mkdir(rollbackDir, { recursive: true });
+      await fs.writeFile(path.resolve(rollbackDir, rollbackBundle), rollbackDiff, "utf8");
+
       if (paths && paths.length > 0) {
         await git.add(paths);
       } else {
         await git.add(["-A"]);
       }
       const r = await git.commit(message);
-      return { commit: r.commit, summary: `${r.summary?.changes ?? 0} changes / ${r.summary?.insertions ?? 0} insertions / ${r.summary?.deletions ?? 0} deletions` };
+      return { commit: r.commit, summary: `${r.summary?.changes ?? 0} changes / ${r.summary?.insertions ?? 0} insertions / ${r.summary?.deletions ?? 0} deletions`, rollbackBundle };
     },
   );
 

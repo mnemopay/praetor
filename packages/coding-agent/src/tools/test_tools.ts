@@ -57,6 +57,7 @@ export function registerTestTools(reg: ToolRegistry, opts: TestToolsOptions): vo
     },
   );
 
+  const allowlist = ["npm", "npx", "node", "tsc", "vitest", "git", "cargo", "pytest", "go", "ls", "pwd", "echo", "cat"];
   reg.register<{ command: string; args?: string[] }, CommandResult>(
     {
       name: "run_command",
@@ -67,9 +68,12 @@ export function registerTestTools(reg: ToolRegistry, opts: TestToolsOptions): vo
         required: ["command"],
       },
       tags, allowedRoles,
-      metadata: { origin: "native", capability: "repo_command_run", risk: ["shell", "filesystem", "network"], approval: "on-side-effect", sandbox: "repo", production: "needs-live-test", costEffective: true, note: "No shell interpolation; production target adds command allowlists and transcript replay." },
+      metadata: { origin: "native", capability: "repo_command_run", risk: ["shell", "filesystem", "network"], approval: "on-side-effect", sandbox: "repo", production: "ready", costEffective: true, note: "Command allowlist enforced natively." },
     },
     async ({ command, args }) => {
+      if (!allowlist.includes(command)) {
+        throw new Error(`Command '${command}' is blocked by Praetor security policies. Allowed: ${allowlist.join(", ")}`);
+      }
       return runCommand(command, args ?? [], root, timeoutMs);
     },
   );

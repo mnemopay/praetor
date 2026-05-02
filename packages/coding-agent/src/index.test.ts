@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { ToolRegistry } from "@praetor/tools";
 import { registerFileTools } from "./tools/file_tools.js";
 import { registerTestTools } from "./tools/test_tools.js";
+import { createPatch } from "diff";
 
 const codingCtx = { role: "coding" };
 
@@ -34,11 +35,12 @@ describe("file tools — path containment", () => {
     expect(readFileSync(join(dir, "deep", "nested", "file.txt"), "utf8")).toBe("ok");
   });
 
-  it("edit_file replaces every literal occurrence", async () => {
-    writeFileSync(join(dir, "n.txt"), "foo bar foo", "utf8");
-    const r = await reg.call<{ replacements: number }>("edit_file", { path: "n.txt", find: "foo", replace: "qux" }, codingCtx);
-    expect(r.replacements).toBe(2);
-    expect(readFileSync(join(dir, "n.txt"), "utf8")).toBe("qux bar qux");
+  it("edit_file applies a unified diff patch", async () => {
+    writeFileSync(join(dir, "n.txt"), "foo bar foo\n", "utf8");
+    const patch = createPatch("n.txt", "foo bar foo\n", "qux bar qux\n");
+    const r = await reg.call<{ success: boolean; rollbackId: string }>("edit_file", { path: "n.txt", patch }, codingCtx);
+    expect(r.success).toBe(true);
+    expect(readFileSync(join(dir, "n.txt"), "utf8")).toBe("qux bar qux\n");
   });
 
   it("grep_codebase finds matches across files", async () => {
@@ -94,7 +96,8 @@ describe("file tools — write/read/edit cycle through registry", () => {
     expect(existsSync(join(dir, "src", "lib.ts"))).toBe(true);
     const before = await reg.call<{ content: string }>("read_file", { path: "src/lib.ts" }, codingCtx);
     expect(before.content).toContain("hi");
-    await reg.call("edit_file", { path: "src/lib.ts", find: "hi", replace: "hello" }, codingCtx);
+    const patch = createPatch("src/lib.ts", "export const greet = (n: string) => `hi ${n}`;\n", "export const greet = (n: string) => `hello ${n}`;\n");
+    await reg.call("edit_file", { path: "src/lib.ts", patch }, codingCtx);
     const after = await reg.call<{ content: string }>("read_file", { path: "src/lib.ts" }, codingCtx);
     expect(after.content).toContain("hello");
     expect(after.content).not.toContain("hi ");
