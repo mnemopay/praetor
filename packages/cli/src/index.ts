@@ -36,6 +36,7 @@ import {
 import { defaultRenderer } from "@praetor/game-assets";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
+import type { ToolApproval, ToolOrigin, ToolProductionState, ToolRisk, ToolSandbox } from "@praetor/tools";
 
 function loadDotenv(...candidates: string[]): void {
   for (const p of candidates) {
@@ -130,6 +131,18 @@ function pickAgent(charter: Charter, payments: PaymentsAdapter, audit: MerkleAud
   return new CoordinatorAgent(router, registry, { fiscal, audit }, policy, route);
 }
 
+function toolMeta(
+  origin: ToolOrigin,
+  capability: string,
+  risk: readonly ToolRisk[],
+  approval: ToolApproval,
+  sandbox: ToolSandbox,
+  production: ToolProductionState,
+  note?: string,
+) {
+  return { origin, capability, risk, approval, sandbox, production, costEffective: true, note };
+}
+
 export async function buildEnhancedRegistry(charter: Charter, missionId: string, audit?: AuditSink) {
   const reg = defaultRegistry();
   const kb = defaultKnowledgeBase({ missionId });
@@ -157,6 +170,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         required: ["query"],
       },
       tags: ["memory", "search"],
+      metadata: toolMeta("native", "knowledge_search", ["none"], "never", "none", "needs-live-test"),
     },
     async ({ query, limit }) => {
       const hits = await kb.query(query as string, (limit as number) ?? 5);
@@ -177,6 +191,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         required: ["text"],
       },
       tags: ["memory", "ingest"],
+      metadata: toolMeta("native", "knowledge_ingest", ["filesystem"], "never", "none", "needs-live-test"),
     },
     async ({ text, source }) => {
       const t = text as string;
@@ -203,7 +218,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["presetId", "title"]
       },
-      tags: ["design", "3d", "landing_page"]
+      tags: ["design", "3d", "landing_page"],
+      metadata: toolMeta("adapter", "design_3d_preset", ["network", "filesystem"], "on-side-effect", "remote-provider", "needs-native-rewrite", "Spline is an export/embed adapter; Praetor should own the scene spec.")
     },
     async ({ presetId, title }) => {
       const pId = presetId as SplinePresetId;
@@ -245,7 +261,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["title", "cards"]
       },
-      tags: ["design", "3d", "landing_page"]
+      tags: ["design", "3d", "landing_page"],
+      metadata: toolMeta("native", "design_html_canvas_3d", ["filesystem"], "on-side-effect", "repo", "needs-live-test")
     },
     async ({ title, background, cards }) => {
       const spec = { title, background, cards } as HtmlInCanvas3DSpec;
@@ -283,7 +300,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["prompt"]
       },
-      tags: ["design", "world-gen", "3d", "glb"]
+      tags: ["design", "world-gen", "3d", "glb"],
+      metadata: toolMeta("adapter", "world_gen_model", ["network", "spend", "filesystem"], "on-cost", "remote-provider", "needs-live-test")
     },
     async (args) => {
       const result = await worldGenModel(args as any, { selector: wgSelector, missionId });
@@ -308,7 +326,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["prompt"]
       },
-      tags: ["design", "world-gen", "3d", "splat"]
+      tags: ["design", "world-gen", "3d", "splat"],
+      metadata: toolMeta("adapter", "world_gen_scene", ["network", "spend", "filesystem"], "on-cost", "remote-provider", "needs-live-test")
     },
     async (args) => {
       const result = await worldGenWorld(args as any, { selector: wgSelector, missionId });
@@ -329,7 +348,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["assetUrl"]
       },
-      tags: ["design", "world-gen", "editor"]
+      tags: ["design", "world-gen", "editor"],
+      metadata: toolMeta("adapter", "world_gen_scene_edit", ["network", "browser"], "on-side-effect", "browser", "needs-live-test")
     },
     async (args) => {
       const result = worldGenEdit(args as any);
@@ -352,7 +372,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["id"]
       },
-      tags: ["design", "world-gen", "viewer"]
+      tags: ["design", "world-gen", "viewer"],
+      metadata: toolMeta("native", "world_gen_scene_publish", ["filesystem"], "on-side-effect", "repo", "needs-live-test")
     },
     async (args) => {
       const result = worldGenPublish({ ...(args as any), outDir: join(outDir, "scenes") });
@@ -378,7 +399,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["origin", "pages"]
       },
-      tags: ["seo", "geo", "sitemap", "generator"]
+      tags: ["seo", "geo", "sitemap", "generator"],
+      metadata: toolMeta("native", "seo_site_generate", ["filesystem"], "on-side-effect", "repo", "needs-live-test")
     },
     async ({ origin, pages }) => {
       const site = { origin, pages } as SiteManifest;
@@ -414,7 +436,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["to", "from", "subject", "text"]
       },
-      tags: ["email", "outbound", "business"]
+      tags: ["email", "outbound", "business"],
+      metadata: toolMeta("adapter", "business_email_send", ["network", "reputation", "external_publish"], "always", "remote-provider", "needs-live-test")
     },
     async (msg) => {
       const res = await ops.email.send(msg as any);
@@ -444,7 +467,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["id", "customerEmail", "lineItems"]
       },
-      tags: ["billing", "invoice", "stripe", "business"]
+      tags: ["billing", "invoice", "stripe", "business"],
+      metadata: toolMeta("adapter", "business_invoice_issue", ["network", "payment", "spend"], "always", "remote-provider", "needs-live-test")
     },
     async (inv) => {
       const res = await ops.biller.issue(inv as any);
@@ -469,7 +493,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["title", "attendeeEmail", "eventTypeSlug"]
       },
-      tags: ["scheduling", "meeting", "cal.com", "business"]
+      tags: ["scheduling", "meeting", "cal.com", "business"],
+      metadata: toolMeta("adapter", "business_meeting_schedule", ["network", "identity", "external_publish"], "on-side-effect", "remote-provider", "needs-live-test")
     },
     async (req) => {
       const res = await ops.scheduler.schedule(req as any);
@@ -495,7 +520,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["email"]
       },
-      tags: ["crm", "contact", "business"]
+      tags: ["crm", "contact", "business"],
+      metadata: toolMeta("native", "business_contact_upsert", ["identity", "filesystem"], "on-side-effect", "none", "needs-live-test")
     },
     async (c) => {
       const res = await ops.contacts.upsert(c as any);
@@ -514,7 +540,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["url"]
       },
-      tags: ["scrape", "research", "crawl"]
+      tags: ["scrape", "research", "crawl"],
+      metadata: toolMeta("native", "web_scrape", ["network"], "never", "remote-provider", "needs-live-test", "Praetor native fetch/extract path is default; hard-page adapters remain optional.")
     },
     async ({ url }) => {
       const res = await scraper.scrape({ url: url as string });
@@ -538,7 +565,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["id", "goal"]
       },
-      tags: ["game", "godot", "assets", "generation"]
+      tags: ["game", "godot", "assets", "generation"],
+      metadata: toolMeta("native", "game_asset_generate", ["filesystem", "network"], "on-side-effect", "repo", "needs-live-test")
     },
     async (spec) => {
       const res = await games.render(spec as any);
@@ -563,7 +591,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["host", "key", "keyLocation", "urlList"]
       },
-      tags: ["seo", "indexnow", "crawler"]
+      tags: ["seo", "indexnow", "crawler"],
+      metadata: toolMeta("adapter", "seo_index_submit", ["network", "external_publish"], "on-side-effect", "remote-provider", "needs-live-test")
     },
     async ({ host, key, keyLocation, urlList }) => {
       const res = await submitIndexNow(host as string, key as string, keyLocation as string, urlList as string[]);
@@ -582,7 +611,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["competitorUrl"]
       },
-      tags: ["seo", "geo", "competitor", "analysis"]
+      tags: ["seo", "geo", "competitor", "analysis"],
+      metadata: toolMeta("native", "geo_competitor_profile", ["network"], "never", "remote-provider", "needs-live-test")
     },
     async ({ competitorUrl }) => {
       const res = await scraper.scrape({ url: competitorUrl as string });
@@ -604,7 +634,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["text"]
       },
-      tags: ["seo", "content", "analysis"]
+      tags: ["seo", "content", "analysis"],
+      metadata: toolMeta("native", "seo_content_analyze", ["none"], "never", "none", "ready")
     },
     async ({ text, targetKeyword }) => {
       const analysis = analyzeContentSeo(text as string, targetKeyword as string | undefined);
@@ -625,7 +656,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["targetSite", "authorName", "niche"]
       },
-      tags: ["seo", "geo", "outreach", "email"]
+      tags: ["seo", "geo", "outreach", "email"],
+      metadata: toolMeta("native", "geo_outreach_draft", ["reputation"], "never", "none", "needs-live-test")
     },
     async ({ targetSite, authorName, niche }) => {
       const sequence = generateOutreachSequence(targetSite as string, authorName as string, niche as string);
@@ -645,7 +677,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["title"]
       },
-      tags: ["seo", "social", "opengraph", "image"]
+      tags: ["seo", "social", "opengraph", "image"],
+      metadata: toolMeta("native", "og_image_generate", ["none"], "never", "none", "ready")
     },
     async ({ title, backgroundUrl }) => {
       const url = generateOgImageUrl(title as string, backgroundUrl as string | undefined);
@@ -666,7 +699,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         required: ["command"]
       },
       tags: ["sysadmin", "os", "terminal", "execute"],
-      allowedRoles: ["coding"]
+      allowedRoles: ["coding"],
+      metadata: toolMeta("native", "sandbox_command_run", ["shell", "filesystem", "network"], "on-side-effect", "microvm", "needs-live-test")
     },
     async ({ command, cwd }) => {
       const res = await sysadmin.runCommand(command as string, cwd as string | undefined);
@@ -686,7 +720,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         required: ["path"]
       },
       tags: ["sysadmin", "os", "file", "read"],
-      allowedRoles: ["coding"]
+      allowedRoles: ["coding"],
+      metadata: toolMeta("native", "sandbox_file_read", ["filesystem"], "never", "microvm", "needs-live-test")
     },
     async ({ path }) => {
       const res = await sysadmin.readFile(path as string);
@@ -708,7 +743,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         required: ["path", "content"]
       },
       tags: ["sysadmin", "os", "file", "write"],
-      allowedRoles: ["coding"]
+      allowedRoles: ["coding"],
+      metadata: toolMeta("native", "sandbox_file_write", ["filesystem"], "on-side-effect", "microvm", "needs-live-test")
     },
     async ({ path, content }) => {
       const res = await sysadmin.writeFile(path as string, content as string);
@@ -729,7 +765,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         required: ["path"]
       },
       tags: ["sysadmin", "os", "file", "list"],
-      allowedRoles: ["coding"]
+      allowedRoles: ["coding"],
+      metadata: toolMeta("native", "sandbox_file_list", ["filesystem"], "never", "microvm", "needs-live-test")
     },
     async ({ path }) => {
       const res = await sysadmin.listDir(path as string);
@@ -739,13 +776,13 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
   );
 
   // Vision
-  reg.register({ name: capture_screen.name, description: capture_screen.description, schema: capture_screen.parameters as any }, capture_screen.execute);
-  reg.register({ name: analyze_image.name, description: analyze_image.description, schema: analyze_image.parameters as any }, analyze_image.execute);
+  reg.register({ name: capture_screen.name, description: capture_screen.description, schema: capture_screen.parameters as any, metadata: toolMeta("adapter", "computer_screen_capture", ["browser", "filesystem"], "always", "host", "needs-live-test") }, capture_screen.execute);
+  reg.register({ name: analyze_image.name, description: analyze_image.description, schema: analyze_image.parameters as any, costUsd: analyze_image.costUsd, metadata: toolMeta("mock", "vision_image_analyze", ["spend"], "on-cost", "remote-provider", "stub") }, analyze_image.execute);
 
   // Social
-  reg.register({ name: post_x_tweet.name, description: post_x_tweet.description, schema: post_x_tweet.parameters as any, allowedRoles: ["marketer", "developer"] }, post_x_tweet.execute);
-  reg.register({ name: post_tiktok_video.name, description: post_tiktok_video.description, schema: post_tiktok_video.parameters as any, allowedRoles: ["marketer"] }, post_tiktok_video.execute);
-  reg.register({ name: schedule_cron_job.name, description: schedule_cron_job.description, schema: schedule_cron_job.parameters as any, allowedRoles: ["architect", "developer"] }, schedule_cron_job.execute);
+  reg.register({ name: post_x_tweet.name, description: post_x_tweet.description, schema: post_x_tweet.parameters as any, costUsd: post_x_tweet.costUsd, allowedRoles: ["marketer", "developer"], metadata: toolMeta("mock", "social_x_post", ["reputation", "external_publish"], "always", "remote-provider", "stub") }, post_x_tweet.execute);
+  reg.register({ name: post_tiktok_video.name, description: post_tiktok_video.description, schema: post_tiktok_video.parameters as any, costUsd: post_tiktok_video.costUsd, allowedRoles: ["marketer"], metadata: toolMeta("mock", "social_tiktok_post", ["reputation", "external_publish"], "always", "remote-provider", "stub") }, post_tiktok_video.execute);
+  reg.register({ name: schedule_cron_job.name, description: schedule_cron_job.description, schema: schedule_cron_job.parameters as any, costUsd: schedule_cron_job.costUsd, allowedRoles: ["architect", "developer"], metadata: toolMeta("mock", "mission_schedule", ["external_publish"], "on-side-effect", "none", "stub") }, schedule_cron_job.execute);
 
   // Dynamic Plugin Loading
   if (charter.plugins && charter.plugins.length > 0) {

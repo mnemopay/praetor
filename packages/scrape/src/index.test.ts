@@ -3,6 +3,8 @@ import {
   extractJsonLd,
   extractSitemapLocs,
   stripHtml,
+  extractReadableText,
+  extractPageEvidence,
   xCookie,
   Scraper,
   FetchAdapter,
@@ -40,6 +42,29 @@ describe("Praetor scrape pack", () => {
   it("strips HTML tags + decodes entities", () => {
     const html = `<p>Hello &amp; <b>world</b><script>bad</script></p>`;
     expect(stripHtml(html)).toBe("Hello & world");
+  });
+
+  it("extracts native readable text and evidence", () => {
+    const html = `<!doctype html><html><head>
+      <title>Praetor Native</title>
+      <meta name="description" content="Native mission runtime">
+      <link rel="canonical" href="/native">
+      </head><body>
+      <nav>Skip this</nav>
+      <main><h1>Praetor runs charters</h1><p>Cost-effective native tools.</p><a href="/docs" rel="help">Docs</a></main>
+      <footer>Skip footer</footer>
+    </body></html>`;
+    const text = extractReadableText(html);
+    const evidence = extractPageEvidence(html, "https://praetor.dev/root", text);
+    expect(text).toContain("Praetor runs charters");
+    expect(text).not.toContain("Skip this");
+    expect(evidence.title).toBe("Praetor Native");
+    expect(evidence.description).toBe("Native mission runtime");
+    expect(evidence.canonicalUrl).toBe("https://praetor.dev/native");
+    expect(evidence.headings[0]).toEqual({ level: 1, text: "Praetor runs charters" });
+    expect(evidence.links[0].href).toBe("https://praetor.dev/docs");
+    expect(evidence.wordCount).toBeGreaterThan(3);
+    expect(evidence.contentHash).toHaveLength(8);
   });
 
   it("builds an X.com cookie header pair", () => {

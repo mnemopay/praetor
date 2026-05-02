@@ -39,6 +39,19 @@ export interface ScrapeResult {
   jsonLd?: Record<string, unknown>[];
   /** Plain-text extraction via a tiny `<tag>`-strip + entity decode. */
   text?: string;
+  /** Native Praetor evidence extracted from HTML responses. */
+  evidence?: PageEvidence;
+}
+
+export interface PageEvidence {
+  title?: string;
+  description?: string;
+  canonicalUrl?: string;
+  headings: { level: 1 | 2 | 3; text: string }[];
+  links: { href: string; text: string; rel?: string }[];
+  meta: Record<string, string>;
+  wordCount: number;
+  contentHash: string;
 }
 
 export interface ScrapeAdapter {
@@ -74,6 +87,7 @@ export class FetchAdapter implements ScrapeAdapter {
       const body = await res.text();
       const contentType = res.headers.get("content-type") ?? "";
       const isHtml = /text\/html|xhtml/i.test(contentType);
+      const text = isHtml ? extractReadableText(body) : undefined;
       return {
         url: req.url,
         status: res.status,
@@ -82,7 +96,8 @@ export class FetchAdapter implements ScrapeAdapter {
         fetchedAt: new Date().toISOString(),
         backend: this.name,
         jsonLd: isHtml ? extractJsonLd(body) : undefined,
-        text: isHtml ? stripHtml(body) : undefined,
+        text,
+        evidence: isHtml ? extractPageEvidence(body, req.url, text) : undefined,
       };
     } finally {
       clearTimeout(t);
@@ -166,6 +181,7 @@ export class PlaywrightAdapter implements ScrapeAdapter {
     }
     const r = await this.launcher(req);
     const isHtml = /text\/html|xhtml/i.test(r.contentType);
+    const text = isHtml ? extractReadableText(r.body) : undefined;
     return {
       url: req.url,
       status: r.status,
@@ -174,7 +190,8 @@ export class PlaywrightAdapter implements ScrapeAdapter {
       fetchedAt: new Date().toISOString(),
       backend: this.name,
       jsonLd: isHtml ? extractJsonLd(r.body) : undefined,
-      text: isHtml ? stripHtml(r.body) : undefined,
+      text,
+      evidence: isHtml ? extractPageEvidence(r.body, req.url, text) : undefined,
     };
   }
 }
@@ -207,7 +224,8 @@ export class FirecrawlAdapter implements ScrapeAdapter {
       fetchedAt: new Date().toISOString(),
       backend: this.name,
       jsonLd: extractJsonLd(html),
-      text: data.data?.markdown ?? stripHtml(html),
+      text: data.data?.markdown ?? extractReadableText(html),
+      evidence: extractPageEvidence(html, req.url, data.data?.markdown ?? extractReadableText(html)),
     };
   }
 }
@@ -247,7 +265,8 @@ export class Crawl4AIAdapter implements ScrapeAdapter {
       fetchedAt: new Date().toISOString(),
       backend: this.name,
       jsonLd: extractJsonLd(html),
-      text: r0.markdown ?? stripHtml(html),
+      text: r0.markdown ?? extractReadableText(html),
+      evidence: extractPageEvidence(html, req.url, r0.markdown ?? extractReadableText(html)),
     };
   }
 }
@@ -283,7 +302,8 @@ export class PlaywrightMcpAdapter implements ScrapeAdapter {
       fetchedAt: new Date().toISOString(),
       backend: this.name,
       jsonLd: extractJsonLd(html),
-      text: snap?.text ?? stripHtml(html),
+      text: snap?.text ?? extractReadableText(html),
+      evidence: extractPageEvidence(html, req.url, snap?.text ?? extractReadableText(html)),
     };
   }
 }
@@ -370,18 +390,108 @@ export function extractSitemapLocs(xml: string): string[] {
  * decodes the five named entities. Good enough for embedding pipelines.
  */
 export function stripHtml(html: string): string {
-  return html
+  return decodeHtml(
+    html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " "),
+  ).replace(/\s+/g, " ").trim();
+}
+
+export function extractReadableText(html: string): string {
+  const pruned = html
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<(nav|footer|aside|form|svg|canvas|iframe)\b[\s\S]*?<\/\1>/gi, " ");
+  const blocks: string[] = [];
+  const blockRe = /<(h[1-3]|p|li|blockquote|td|th|figcaption|article|section)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(pruned))) {
+    const text = stripHtml(m[2]);
+    if (text.length >= 2) blocks.push(text);
+  }
+  const text = blocks.length ? blocks.join("\n") : stripHtml(pruned);
+  return text.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+export function extractPageEvidence(html: string, pageUrl = "", text = extractReadableText(html)): PageEvidence {
+  const meta = extractMeta(html);
+  const title = firstMatch(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
+  const canonicalUrl = firstAttr(html, /<link\b[^>]*rel=["'][^"']*canonical[^"']*["'][^>]*>/i, "href");
+  const headings = [...html.matchAll(/<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi)]
+    .map((m) => ({ level: Number(m[1]) as 1 | 2 | 3, text: stripHtml(m[2]) }))
+    .filter((h) => h.text);
+  const links = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)]
+    .map((m) => ({
+      href: absolutize(firstAttrFromAttrs(m[1], "href"), pageUrl),
+      text: stripHtml(m[2]),
+      rel: firstAttrFromAttrs(m[1], "rel") || undefined,
+    }))
+    .filter((l) => l.href);
+  return {
+    title: title ? stripHtml(title) : undefined,
+    description: meta.description ?? meta["og:description"] ?? meta["twitter:description"],
+    canonicalUrl: canonicalUrl ? absolutize(canonicalUrl, pageUrl) : undefined,
+    headings,
+    links,
+    meta,
+    wordCount: text ? text.split(/\s+/).filter(Boolean).length : 0,
+    contentHash: stableHash(text || stripHtml(html)),
+  };
+}
+
+function extractMeta(html: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of html.matchAll(/<meta\b([^>]*)>/gi)) {
+    const attrs = m[1];
+    const key = firstAttrFromAttrs(attrs, "name") || firstAttrFromAttrs(attrs, "property");
+    const content = firstAttrFromAttrs(attrs, "content");
+    if (key && content) out[key.toLowerCase()] = decodeHtml(content);
+  }
+  return out;
+}
+
+function firstMatch(s: string, re: RegExp): string | undefined {
+  return re.exec(s)?.[1];
+}
+
+function firstAttr(tag: string, re: RegExp, attr: string): string | undefined {
+  const m = re.exec(tag);
+  return m ? firstAttrFromAttrs(m[0], attr) : undefined;
+}
+
+function firstAttrFromAttrs(attrs: string, attr: string): string {
+  const re = new RegExp(`${attr}\\s*=\\s*["']([^"']*)["']`, "i");
+  return re.exec(attrs)?.[1] ?? "";
+}
+
+function absolutize(href: string, base: string): string {
+  if (!href) return "";
+  try {
+    return base ? new URL(href, base).toString() : href;
+  } catch {
+    return href;
+  }
+}
+
+function stableHash(s: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+function decodeHtml(s: string): string {
+  return s
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/&#39;/g, "'");
 }
 
 /**
