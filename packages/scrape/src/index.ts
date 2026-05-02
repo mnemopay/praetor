@@ -45,6 +45,8 @@ export interface ScrapeResult {
   text?: string;
   /** Native Praetor evidence extracted from HTML responses. */
   evidence?: PageEvidence;
+  /** Security observations about scraped untrusted content. */
+  warnings?: ScrapeWarning[];
   /** Crawl policy applied before fetching. */
   crawl?: CrawlDecision;
 }
@@ -58,6 +60,21 @@ export interface PageEvidence {
   meta: Record<string, string>;
   wordCount: number;
   contentHash: string;
+  boundaries: EvidenceBoundary[];
+}
+
+export interface EvidenceBoundary {
+  kind: "title" | "meta" | "heading" | "paragraph" | "link" | "jsonld";
+  text: string;
+  source: string;
+  trust: "page";
+}
+
+export interface ScrapeWarning {
+  code: "prompt_injection" | "suspicious_instruction";
+  severity: "low" | "medium" | "high";
+  text: string;
+  location: string;
 }
 
 export interface RobotsPolicy {
@@ -112,6 +129,7 @@ export class FetchAdapter implements ScrapeAdapter {
       const contentType = res.headers.get("content-type") ?? "";
       const isHtml = /text\/html|xhtml/i.test(contentType);
       const text = isHtml ? extractReadableText(body) : undefined;
+      const warnings = isHtml ? detectScrapeWarnings(body, text) : [];
       return {
         url: req.url,
         status: res.status,
@@ -122,6 +140,7 @@ export class FetchAdapter implements ScrapeAdapter {
         jsonLd: isHtml ? extractJsonLd(body) : undefined,
         text,
         evidence: isHtml ? extractPageEvidence(body, req.url, text) : undefined,
+        warnings,
       };
     } finally {
       clearTimeout(t);
@@ -206,6 +225,7 @@ export class PlaywrightAdapter implements ScrapeAdapter {
     const r = await this.launcher(req);
     const isHtml = /text\/html|xhtml/i.test(r.contentType);
     const text = isHtml ? extractReadableText(r.body) : undefined;
+    const warnings = isHtml ? detectScrapeWarnings(r.body, text) : [];
     return {
       url: req.url,
       status: r.status,
@@ -216,6 +236,7 @@ export class PlaywrightAdapter implements ScrapeAdapter {
       jsonLd: isHtml ? extractJsonLd(r.body) : undefined,
       text,
       evidence: isHtml ? extractPageEvidence(r.body, req.url, text) : undefined,
+      warnings,
     };
   }
 }
@@ -240,6 +261,7 @@ export class FirecrawlAdapter implements ScrapeAdapter {
     });
     const data = (await res.json()) as { data?: { html?: string; markdown?: string } };
     const html = data.data?.html ?? "";
+    const text = data.data?.markdown ?? extractReadableText(html);
     return {
       url: req.url,
       status: res.status,
@@ -248,8 +270,9 @@ export class FirecrawlAdapter implements ScrapeAdapter {
       fetchedAt: new Date().toISOString(),
       backend: this.name,
       jsonLd: extractJsonLd(html),
-      text: data.data?.markdown ?? extractReadableText(html),
-      evidence: extractPageEvidence(html, req.url, data.data?.markdown ?? extractReadableText(html)),
+      text,
+      evidence: extractPageEvidence(html, req.url, text),
+      warnings: detectScrapeWarnings(html, text),
     };
   }
 }
@@ -281,6 +304,7 @@ export class Crawl4AIAdapter implements ScrapeAdapter {
     const data = (await res.json()) as { results?: { html?: string; cleaned_html?: string; markdown?: string; status_code?: number }[] };
     const r0 = data.results?.[0] ?? {};
     const html = r0.cleaned_html ?? r0.html ?? "";
+    const text = r0.markdown ?? extractReadableText(html);
     return {
       url: req.url,
       status: r0.status_code ?? res.status,
@@ -289,8 +313,9 @@ export class Crawl4AIAdapter implements ScrapeAdapter {
       fetchedAt: new Date().toISOString(),
       backend: this.name,
       jsonLd: extractJsonLd(html),
-      text: r0.markdown ?? extractReadableText(html),
-      evidence: extractPageEvidence(html, req.url, r0.markdown ?? extractReadableText(html)),
+      text,
+      evidence: extractPageEvidence(html, req.url, text),
+      warnings: detectScrapeWarnings(html, text),
     };
   }
 }
@@ -318,6 +343,7 @@ export class PlaywrightMcpAdapter implements ScrapeAdapter {
     await this.bridge.callTool(navTool, { url: req.url });
     const snap = (await this.bridge.callTool(snapTool, {})) as { html?: string; text?: string; status?: number };
     const html = typeof snap?.html === "string" ? snap.html : "";
+    const text = snap?.text ?? extractReadableText(html);
     return {
       url: req.url,
       status: typeof snap?.status === "number" ? snap.status : 200,
@@ -326,8 +352,9 @@ export class PlaywrightMcpAdapter implements ScrapeAdapter {
       fetchedAt: new Date().toISOString(),
       backend: this.name,
       jsonLd: extractJsonLd(html),
-      text: snap?.text ?? extractReadableText(html),
-      evidence: extractPageEvidence(html, req.url, snap?.text ?? extractReadableText(html)),
+      text,
+      evidence: extractPageEvidence(html, req.url, text),
+      warnings: detectScrapeWarnings(html, text),
     };
   }
 }
@@ -357,7 +384,7 @@ export class Scraper {
     const backend = req.backend ?? "fetch";
     const crawl = await this.prepareCrawl(req);
     if (!crawl.allowed) {
-      return {
+    return {
         url: req.url,
         status: 999,
         contentType: "text/plain",
@@ -366,10 +393,11 @@ export class Scraper {
         backend,
         text: "",
         crawl,
+        warnings: [],
       };
     }
     const result = await this.adapters[backend].fetch(req);
-    return { ...result, crawl };
+    return { ...result, warnings: result.warnings ?? [], crawl };
   }
 
   /**
@@ -585,6 +613,20 @@ export function extractPageEvidence(html: string, pageUrl = "", text = extractRe
       rel: firstAttrFromAttrs(m[1], "rel") || undefined,
     }))
     .filter((l) => l.href);
+  const boundaries: EvidenceBoundary[] = [];
+  if (title) boundaries.push({ kind: "title", text: stripHtml(title), source: "title", trust: "page" });
+  for (const [key, value] of Object.entries(meta)) {
+    boundaries.push({ kind: "meta", text: value, source: `meta:${key}`, trust: "page" });
+  }
+  for (const h of headings) {
+    boundaries.push({ kind: "heading", text: h.text, source: `h${h.level}`, trust: "page" });
+  }
+  for (const p of extractParagraphs(html)) {
+    boundaries.push({ kind: "paragraph", text: p, source: "body", trust: "page" });
+  }
+  for (const l of links.slice(0, 100)) {
+    boundaries.push({ kind: "link", text: l.text, source: l.href, trust: "page" });
+  }
   return {
     title: title ? stripHtml(title) : undefined,
     description: meta.description ?? meta["og:description"] ?? meta["twitter:description"],
@@ -594,7 +636,38 @@ export function extractPageEvidence(html: string, pageUrl = "", text = extractRe
     meta,
     wordCount: text ? text.split(/\s+/).filter(Boolean).length : 0,
     contentHash: stableHash(text || stripHtml(html)),
+    boundaries,
   };
+}
+
+export function detectScrapeWarnings(html: string, text = extractReadableText(html)): ScrapeWarning[] {
+  const haystack = `${stripHtml(html)}\n${text}`.slice(0, 250_000);
+  const patterns: { re: RegExp; code: ScrapeWarning["code"]; severity: ScrapeWarning["severity"] }[] = [
+    { re: /\b(ignore|disregard|forget)\s+(all\s+)?(previous|prior|above)\s+(instructions|rules|messages)\b/i, code: "prompt_injection", severity: "high" },
+    { re: /\b(system|developer)\s+message\s*:/i, code: "prompt_injection", severity: "high" },
+    { re: /\bdo\s+not\s+(tell|reveal|mention)\s+(the\s+)?(user|operator)\b/i, code: "suspicious_instruction", severity: "medium" },
+    { re: /\b(send|exfiltrate|upload)\s+(secrets|api keys|tokens|passwords)\b/i, code: "prompt_injection", severity: "high" },
+    { re: /\btool\s+call\s*:\s*[{[]/i, code: "suspicious_instruction", severity: "medium" },
+  ];
+  const warnings: ScrapeWarning[] = [];
+  for (const p of patterns) {
+    const m = p.re.exec(haystack);
+    if (m) warnings.push({ code: p.code, severity: p.severity, text: snippet(haystack, m.index), location: "page_text" });
+  }
+  return warnings;
+}
+
+function extractParagraphs(html: string): string[] {
+  return [...html.matchAll(/<(p|li|blockquote|figcaption)\b[^>]*>([\s\S]*?)<\/\1>/gi)]
+    .map((m) => stripHtml(m[2]))
+    .filter((s) => s.length > 0)
+    .slice(0, 200);
+}
+
+function snippet(s: string, index: number): string {
+  const start = Math.max(0, index - 80);
+  const end = Math.min(s.length, index + 160);
+  return s.slice(start, end).replace(/\s+/g, " ").trim();
 }
 
 function extractMeta(html: string): Record<string, string> {
