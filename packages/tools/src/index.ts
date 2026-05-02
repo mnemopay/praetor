@@ -45,6 +45,7 @@ export interface FiscalGate {
 export interface ToolCallContext {
   audit?: { record: (type: string, data: Record<string, unknown>) => void };
   fiscal?: FiscalGate;
+  role?: string;
 }
 
 interface RegisteredTool {
@@ -93,6 +94,9 @@ export class ToolRegistry {
   ): Promise<O> {
     const reg = this.tools.get(name);
     if (!reg) throw new Error(`tool '${name}' not registered`);
+    if (reg.def.allowedRoles?.length && (!ctx.role || !reg.def.allowedRoles.includes(ctx.role))) {
+      throw new Error(`tool '${name}' is not allowed for role '${ctx.role ?? "unknown"}'`);
+    }
     validateAgainstSchema(input, reg.def.schema, name);
 
     const estUsd = reg.def.costUsd ?? 0;

@@ -75,4 +75,19 @@ describe("ToolRegistry", () => {
     expect(reg.has("coingecko.simple_price")).toBe(true);
     expect(reg.has("rest_countries.name")).toBe(true);
   });
+
+  it("enforces allowedRoles during direct execution", async () => {
+    const reg = new ToolRegistry();
+    reg.register(
+      {
+        name: "host_write",
+        description: "writes somewhere sensitive",
+        schema: { type: "object", properties: {}, required: [] },
+        allowedRoles: ["coding"],
+      },
+      async () => "ok"
+    );
+    await expect(reg.call("host_write", {}, { role: "developer" })).rejects.toThrow(/not allowed/);
+    await expect(reg.call("host_write", {}, { role: "coding" })).resolves.toBe("ok");
+  });
 });

@@ -12,7 +12,11 @@ export interface MissionResult {
 
 export interface MissionContext {
   charter: Charter;
-  payments: { reserve: (usd: number) => Promise<{ holdId: string }>; settle: (holdId: string, usd: number) => Promise<void> };
+  payments: {
+    reserve: (usd: number) => Promise<{ holdId: string }>;
+    settle: (holdId: string, usd: number) => Promise<void>;
+    release?: (holdId: string) => Promise<void>;
+  };
   agents: { run: (charter: Charter, signal?: AbortSignal) => Promise<{ outputs: string[]; spentUsd: number }> };
   audit: { record: (event: string, data: Record<string, unknown>) => void; finalize: () => string };
   signal?: AbortSignal;
@@ -29,11 +33,25 @@ export async function runMission(ctx: MissionContext): Promise<MissionResult> {
     result = await ctx.agents.run(ctx.charter, ctx.signal);
   } catch (e) {
     ctx.audit.record("mission.error", { error: (e as Error).message });
+    await ctx.payments.release?.(hold.holdId);
     return {
       charterName: ctx.charter.name,
       status: "error",
       spentUsd: 0,
       outputs: [],
+      auditDigest: ctx.audit.finalize(),
+      startedAt,
+      finishedAt: new Date().toISOString(),
+    };
+  }
+  if (result.spentUsd > ctx.charter.budget.maxUsd) {
+    ctx.audit.record("budget.exceeded", { spentUsd: result.spentUsd, maxUsd: ctx.charter.budget.maxUsd });
+    await ctx.payments.release?.(hold.holdId);
+    return {
+      charterName: ctx.charter.name,
+      status: "halted",
+      spentUsd: result.spentUsd,
+      outputs: result.outputs,
       auditDigest: ctx.audit.finalize(),
       startedAt,
       finishedAt: new Date().toISOString(),

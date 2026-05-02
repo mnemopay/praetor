@@ -141,9 +141,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
   const scraper = defaultScraper(process.env);
   const games = defaultRenderer({ outDir: join(outDir, "games") });
 
-  // In real implementation this would use charter.sandbox.kind
-  // For now we instantiate the MockSandbox by default if not native
-  const sysadmin = new SysadminModule(); // Using native fallback until async sandbox init is wired in runMission
+  const sandbox = await new SandboxDispatcher({ mock: new MockSandboxFactory() }).create(charter.sandbox?.kind ?? "mock");
+  const sysadmin = new SysadminModule(sandbox);
 
   reg.register(
     {
@@ -666,7 +665,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["command"]
       },
-      tags: ["sysadmin", "os", "terminal", "execute"]
+      tags: ["sysadmin", "os", "terminal", "execute"],
+      allowedRoles: ["coding"]
     },
     async ({ command, cwd }) => {
       const res = await sysadmin.runCommand(command as string, cwd as string | undefined);
@@ -685,7 +685,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["path"]
       },
-      tags: ["sysadmin", "os", "file", "read"]
+      tags: ["sysadmin", "os", "file", "read"],
+      allowedRoles: ["coding"]
     },
     async ({ path }) => {
       const res = await sysadmin.readFile(path as string);
@@ -706,7 +707,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["path", "content"]
       },
-      tags: ["sysadmin", "os", "file", "write"]
+      tags: ["sysadmin", "os", "file", "write"],
+      allowedRoles: ["coding"]
     },
     async ({ path, content }) => {
       const res = await sysadmin.writeFile(path as string, content as string);
@@ -726,7 +728,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["path"]
       },
-      tags: ["sysadmin", "os", "file", "list"]
+      tags: ["sysadmin", "os", "file", "list"],
+      allowedRoles: ["coding"]
     },
     async ({ path }) => {
       const res = await sysadmin.listDir(path as string);
@@ -829,7 +832,7 @@ async function cmdRun(args: string[]) {
   const result = await runMission({
     charter,
     payments,
-    agents: { run: async (c, signal) => agent.run({ goal: c.goal, outputs: c.outputs, budgetUsd: c.budget.maxUsd, steps: c.steps, agents: c.agents, signal }) },
+    agents: { run: async (c, signal) => agent.run({ goal: c.goal, outputs: c.outputs, budgetUsd: c.budget.maxUsd, steps: c.steps, agents: c.agents, signal, role: c.agents[0]?.role }) },
     audit,
   });
 

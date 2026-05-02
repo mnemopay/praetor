@@ -64,7 +64,7 @@ export class NativePraetorEngine implements AgentAdapter {
           if (!evalRes.allowed) throw new Error(`Policy Denied: ${evalRes.reason}`);
         }
         
-        const res = await this.tools.call(step.action, step.args || {}, this.toolContext);
+        const res = await this.tools.call(step.action, step.args || {}, { ...this.toolContext, role: input.role });
         outputs.push(`Executed ${step.action}: ${JSON.stringify(res)}`);
       }
       return { outputs: [...outputs, ...input.outputs], spentUsd };
@@ -126,7 +126,7 @@ export class NativePraetorEngine implements AgentAdapter {
         if (input.signal?.aborted) throw new Error("Mission aborted via kill switch");
         try {
           const args = JSON.parse(call.function.arguments);
-          const result = await this.tools.call(call.function.name, args, this.toolContext);
+          const result = await this.tools.call(call.function.name, args, { ...this.toolContext, role: input.role });
           messages.push({
             role: "tool",
             tool_call_id: call.id,
@@ -236,4 +236,3 @@ export class CoordinatorAgent implements AgentAdapter {
     return { outputs, spentUsd };
   }
 }
-
