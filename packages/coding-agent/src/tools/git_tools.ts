@@ -23,6 +23,7 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
       description: "List uncommitted changes in the working tree.",
       schema: { type: "object", properties: {}, required: [] },
       tags, allowedRoles,
+      metadata: { origin: "adapter", capability: "git_status", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true, note: "Uses simple-git adapter; Praetor owns the schema and policy." },
     },
     async () => {
       const s = await git.status();
@@ -42,6 +43,7 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
       description: "Show the unstaged diff (optionally for a single path).",
       schema: { type: "object", properties: { path: { type: "string" } }, required: [] },
       tags, allowedRoles,
+      metadata: { origin: "adapter", capability: "git_diff", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true, note: "Uses simple-git adapter; production target is structured diff model." },
     },
     async ({ path }) => {
       const diff = path ? await git.diff([path]) : await git.diff();
@@ -62,6 +64,7 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
         required: ["message"],
       },
       tags, allowedRoles,
+      metadata: { origin: "adapter", capability: "git_commit", risk: ["filesystem"], approval: "on-side-effect", sandbox: "repo", production: "needs-live-test", costEffective: true, note: "Commits are side effects and should be approval-gated in operator workflows." },
     },
     async ({ message, paths }) => {
       if (paths && paths.length > 0) {
@@ -80,6 +83,7 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
       description: "List branches and report the current one.",
       schema: { type: "object", properties: {}, required: [] },
       tags, allowedRoles,
+      metadata: { origin: "adapter", capability: "git_branch", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true },
     },
     async () => {
       const b = await git.branchLocal();
@@ -93,6 +97,7 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
       description: "Show recent commits.",
       schema: { type: "object", properties: { limit: { type: "integer" } }, required: [] },
       tags, allowedRoles,
+      metadata: { origin: "adapter", capability: "git_log", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true },
     },
     async ({ limit }) => {
       const r = await git.log({ maxCount: typeof limit === "number" ? limit : 20 });

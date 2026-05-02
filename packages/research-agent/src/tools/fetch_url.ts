@@ -24,6 +24,7 @@ export function registerFetchUrl(reg: ToolRegistry, opts: FetchToolOptions = {})
       description: "Fetch a URL and return readable text plus any embedded JSON-LD blocks.",
       schema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] },
       tags, allowedRoles,
+      metadata: { origin: "native", capability: "url_fetch_evidence", risk: ["network"], approval: "never", sandbox: "remote-provider", production: "needs-live-test", costEffective: true, note: "Backed by Praetor scraper abstraction; native crawler is the production default target." },
     },
     async ({ url }) => {
       const result = await adapter.fetch({ url, userAgent: opts.userAgent, timeoutMs: opts.timeoutMs });

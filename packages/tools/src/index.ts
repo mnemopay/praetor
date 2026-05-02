@@ -21,6 +21,41 @@ export interface JsonSchemaProp {
   items?: JsonSchemaProp;
 }
 
+export type ToolOrigin = "native" | "adapter" | "mock" | "experimental";
+export type ToolRisk =
+  | "filesystem"
+  | "shell"
+  | "network"
+  | "spend"
+  | "identity"
+  | "reputation"
+  | "browser"
+  | "payment"
+  | "external_publish"
+  | "none";
+export type ToolApproval = "never" | "on-cost" | "on-side-effect" | "always";
+export type ToolSandbox = "none" | "repo" | "browser" | "microvm" | "host" | "remote-provider";
+export type ToolProductionState = "ready" | "needs-live-test" | "needs-native-rewrite" | "stub";
+
+export interface ToolProductionMetadata {
+  /** Whether this is first-party Praetor code or an adapter/mock/stub. */
+  origin: ToolOrigin;
+  /** Short product-level capability name, independent of provider details. */
+  capability: string;
+  /** Risk categories the policy engine and dashboard should surface. */
+  risk: readonly ToolRisk[];
+  /** When a human approval gate should run before execution. */
+  approval: ToolApproval;
+  /** Where the tool executes or where its side effect lands. */
+  sandbox: ToolSandbox;
+  /** Current production readiness. */
+  production: ToolProductionState;
+  /** True when this tool is designed to prefer free/local/native paths. */
+  costEffective?: boolean;
+  /** Optional note for dashboards and CI reports. */
+  note?: string;
+}
+
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -31,6 +66,8 @@ export interface ToolDefinition {
   tags?: readonly string[];
   /** Roles that are allowed to execute this tool. If empty, all roles can. */
   allowedRoles?: readonly string[];
+  /** Praetor-native provenance and production-readiness metadata. */
+  metadata?: ToolProductionMetadata;
 }
 
 export type ToolHandler<I = Record<string, unknown>, O = unknown> = (input: I) => Promise<O>;
@@ -87,6 +124,21 @@ export class ToolRegistry {
     );
   }
 
+  productionReport(): { total: number; byOrigin: Record<ToolOrigin, number>; byState: Record<ToolProductionState, number>; missingMetadata: string[] } {
+    const byOrigin: Record<ToolOrigin, number> = { native: 0, adapter: 0, mock: 0, experimental: 0 };
+    const byState: Record<ToolProductionState, number> = { ready: 0, "needs-live-test": 0, "needs-native-rewrite": 0, stub: 0 };
+    const missingMetadata: string[] = [];
+    for (const def of this.list()) {
+      if (!def.metadata) {
+        missingMetadata.push(def.name);
+        continue;
+      }
+      byOrigin[def.metadata.origin] += 1;
+      byState[def.metadata.production] += 1;
+    }
+    return { total: this.list().length, byOrigin, byState, missingMetadata };
+  }
+
   async call<O = unknown>(
     name: string,
     input: Record<string, unknown>,
@@ -103,18 +155,18 @@ export class ToolRegistry {
     if (estUsd > 0 && ctx.fiscal) {
       await ctx.fiscal.approve({ tool: name, estUsd, input });
     }
-    ctx.audit?.record("tool.call.start", { name, estUsd, input: redact(input) });
+    ctx.audit?.record("tool.call.start", { name, estUsd, role: ctx.role, metadata: reg.def.metadata, input: redact(input) });
 
     try {
       const out = (await reg.handler(input)) as O;
-      ctx.audit?.record("tool.call.ok", { name, estUsd });
+      ctx.audit?.record("tool.call.ok", { name, estUsd, role: ctx.role, metadata: reg.def.metadata });
       if (estUsd > 0 && ctx.fiscal) {
         await ctx.fiscal.settle({ tool: name, estUsd, actualUsd: estUsd });
       }
       return out;
     } catch (e) {
       const error = (e as Error).message;
-      ctx.audit?.record("tool.call.error", { name, error });
+      ctx.audit?.record("tool.call.error", { name, error, role: ctx.role, metadata: reg.def.metadata });
       if (estUsd > 0 && ctx.fiscal) {
         await ctx.fiscal.settle({ tool: name, estUsd, error });
       }
@@ -199,6 +251,16 @@ export function registerPublicApi(reg: ToolRegistry, entry: PublicApiEntry): voi
         required: [],
       },
       tags: entry.tags ?? ["public-api", "free"],
+      metadata: {
+        origin: "adapter",
+        capability: "public_api_fetch",
+        risk: ["network"],
+        approval: "never",
+        sandbox: "remote-provider",
+        production: "needs-native-rewrite",
+        costEffective: true,
+        note: "Starter public API adapter. Production Praetor tools should graduate to native capability-specific implementations.",
+      },
     },
     async ({ path }) => {
       const url = path ? `${entry.url}${path}` : entry.url;

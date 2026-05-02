@@ -35,6 +35,7 @@ export function registerFileTools(reg: ToolRegistry, opts: FileToolsOptions): vo
       description: "Read a UTF-8 file, relative to the repo root.",
       schema: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
       tags, allowedRoles,
+      metadata: { origin: "native", capability: "repo_file_read", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "ready", costEffective: true },
     },
     async ({ path }) => {
       const abs = safe(path);
@@ -53,6 +54,7 @@ export function registerFileTools(reg: ToolRegistry, opts: FileToolsOptions): vo
         required: ["path", "content"],
       },
       tags, allowedRoles,
+      metadata: { origin: "native", capability: "repo_file_write", risk: ["filesystem"], approval: "on-side-effect", sandbox: "repo", production: "needs-live-test", costEffective: true },
     },
     async ({ path, content }) => {
       const abs = safe(path);
@@ -72,6 +74,7 @@ export function registerFileTools(reg: ToolRegistry, opts: FileToolsOptions): vo
         required: ["path", "find", "replace"],
       },
       tags, allowedRoles,
+      metadata: { origin: "native", capability: "repo_file_edit", risk: ["filesystem"], approval: "on-side-effect", sandbox: "repo", production: "needs-live-test", costEffective: true, note: "Literal replace today; production target is patch-first and AST-aware editing." },
     },
     async ({ path, find, replace }) => {
       const abs = safe(path);
@@ -93,6 +96,7 @@ export function registerFileTools(reg: ToolRegistry, opts: FileToolsOptions): vo
       description: "List files (one level deep) in a directory inside the repo root.",
       schema: { type: "object", properties: { dir: { type: "string" } }, required: [] },
       tags, allowedRoles,
+      metadata: { origin: "native", capability: "repo_file_list", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "ready", costEffective: true },
     },
     async ({ dir }) => {
       const abs = dir ? safe(dir) : root;
@@ -117,6 +121,7 @@ export function registerFileTools(reg: ToolRegistry, opts: FileToolsOptions): vo
         required: ["pattern"],
       },
       tags, allowedRoles,
+      metadata: { origin: "native", capability: "repo_code_search", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "ready", costEffective: true },
     },
     async ({ pattern, dir, maxResults }) => {
       const abs = dir ? safe(dir) : root;

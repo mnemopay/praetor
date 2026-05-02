@@ -39,6 +39,7 @@ export function registerWebSearch(reg: ToolRegistry, opts: WebSearchOptions = {}
         required: ["query"],
       },
       tags, allowedRoles,
+      metadata: { origin: "adapter", capability: "web_search", risk: ["network"], approval: "never", sandbox: "remote-provider", production: "needs-live-test", costEffective: true, note: "Cost mode prefers DuckDuckGo; Brave is optional quality adapter." },
     },
     async ({ query, limit }) => {
       const requireLive = env.WORLD_GEN_REQUIRE_LIVE === "true";

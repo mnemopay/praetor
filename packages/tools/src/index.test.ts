@@ -90,4 +90,12 @@ describe("ToolRegistry", () => {
     await expect(reg.call("host_write", {}, { role: "developer" })).rejects.toThrow(/not allowed/);
     await expect(reg.call("host_write", {}, { role: "coding" })).resolves.toBe("ok");
   });
+
+  it("reports production metadata coverage", () => {
+    const reg = defaultRegistry();
+    const report = reg.productionReport();
+    expect(report.total).toBeGreaterThan(0);
+    expect(report.byOrigin.adapter).toBeGreaterThan(0);
+    expect(report.missingMetadata).toEqual([]);
+  });
 });

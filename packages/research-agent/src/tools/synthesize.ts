@@ -40,6 +40,8 @@ export function registerSynthesize(reg: ToolRegistry, opts: SynthesizeOptions): 
         required: ["goal", "hits"],
       },
       tags, allowedRoles,
+      costUsd: 0.002,
+      metadata: { origin: "adapter", capability: "research_synthesis", risk: ["spend"], approval: "on-cost", sandbox: "remote-provider", production: "needs-live-test", costEffective: true, note: "Uses Praetor router so low-cost/open-weight providers can be preferred by policy." },
     },
     async ({ goal, hits }) => {
       const route: RouteRequirements = env.RESEARCH_PREFER === "cost"

@@ -7,6 +7,7 @@ import {
   faqSchema,
   breadcrumbSchema,
   softwareApplicationSchema,
+  generateOgImageUrl,
 } from "./index.js";
 
 describe("Praetor SEO/GEO pack", () => {
@@ -97,5 +98,11 @@ describe("Praetor SEO/GEO pack", () => {
       name: "Praetor", description: "x", url: "https://praetor.dev",
     });
     expect(sa["@type"]).toBe("SoftwareApplication");
+  });
+
+  it("generates cost-free native OpenGraph images", () => {
+    const url = generateOgImageUrl("Praetor native mission runtime");
+    expect(url).toMatch(/^data:image\/svg\+xml;base64,/);
+    expect(url).not.toContain("pollinations");
   });
 });

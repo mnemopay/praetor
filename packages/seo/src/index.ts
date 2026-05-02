@@ -505,9 +505,64 @@ export function generateOutreachSequence(targetSite: string, authorName: string,
 }
 
 export function generateOgImageUrl(title: string, backgroundUrl?: string) {
-  let url = `https://image.pollinations.ai/prompt/${encodeURIComponent(title)}?width=1200&height=630&nologo=true`;
-  if (backgroundUrl) {
-    url += `&seed=${encodeURIComponent(backgroundUrl)}`; // Using seed loosely as a deterministic variation
+  return generateNativeOgImageDataUrl(title, { backgroundUrl });
+}
+
+export function generateNativeOgImageDataUrl(title: string, opts: { backgroundUrl?: string; subtitle?: string } = {}) {
+  const cleanTitle = clampWords(title.trim() || "Praetor", 12);
+  const subtitle = opts.subtitle ?? "Praetor native GEO asset";
+  const seed = hash(`${cleanTitle}|${opts.backgroundUrl ?? ""}`);
+  const hueA = 220 + (seed % 32);
+  const hueB = 172 + (seed % 28);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="hsl(${hueA}, 56%, 10%)"/>
+      <stop offset="0.56" stop-color="#050510"/>
+      <stop offset="1" stop-color="hsl(${hueB}, 65%, 13%)"/>
+    </linearGradient>
+    <radialGradient id="ring" cx="50%" cy="45%" r="50%">
+      <stop offset="0" stop-color="#a5b4fc" stop-opacity="0.52"/>
+      <stop offset="0.44" stop-color="#67e8f9" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#050510" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="870" cy="188" r="260" fill="url(#ring)"/>
+  <circle cx="870" cy="188" r="172" fill="none" stroke="#a5b4fc" stroke-width="2" opacity="0.42"/>
+  <circle cx="870" cy="188" r="232" fill="none" stroke="#67e8f9" stroke-width="1" opacity="0.22"/>
+  <path d="M96 484 C266 420 380 530 548 470 S846 366 1104 454" fill="none" stroke="#86efac" stroke-width="2" opacity="0.35"/>
+  <text x="92" y="118" fill="#a5b4fc" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700" letter-spacing="4">PRAETOR</text>
+  <foreignObject x="88" y="174" width="760" height="260">
+    <div xmlns="http://www.w3.org/1999/xhtml" style="font-family:Inter,Arial,sans-serif;color:#e8e8f0;font-size:64px;line-height:1.05;font-weight:700;letter-spacing:0;word-wrap:break-word;">
+      ${escapeHtml(cleanTitle)}
+    </div>
+  </foreignObject>
+  <text x="92" y="512" fill="#7d7d9c" font-family="JetBrains Mono, Consolas, monospace" font-size="24">${escapeXml(subtitle)}</text>
+  <text x="92" y="552" fill="#86efac" font-family="JetBrains Mono, Consolas, monospace" font-size="18">native:og-image · cost:$0 · audited</text>
+</svg>`;
+  return `data:image/svg+xml;base64,${base64(svg)}`;
+}
+
+function clampWords(s: string, maxWords: number) {
+  const words = s.split(/\s+/).filter(Boolean);
+  return words.length <= maxWords ? s : `${words.slice(0, maxWords).join(" ")}...`;
+}
+
+function hash(s: string) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
   }
-  return url;
+  return h >>> 0;
+}
+
+function base64(s: string) {
+  if (typeof Buffer !== "undefined") return Buffer.from(s, "utf8").toString("base64");
+  return btoa(unescape(encodeURIComponent(s)));
+}
+
+function escapeHtml(s: string) {
+  return escapeXml(s).replace(/"/g, "&quot;");
 }

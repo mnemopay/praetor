@@ -39,6 +39,7 @@ export function registerTestTools(reg: ToolRegistry, opts: TestToolsOptions): vo
       description: "Run the project's test suite. Autodetects npm test, pytest, cargo test, or go test.",
       schema: { type: "object", properties: {}, required: [] },
       tags, allowedRoles,
+      metadata: { origin: "native", capability: "repo_test_run", risk: ["shell"], approval: "on-side-effect", sandbox: "repo", production: "needs-live-test", costEffective: true },
     },
     async () => {
       const detected = detectTestCommand(root);
@@ -66,6 +67,7 @@ export function registerTestTools(reg: ToolRegistry, opts: TestToolsOptions): vo
         required: ["command"],
       },
       tags, allowedRoles,
+      metadata: { origin: "native", capability: "repo_command_run", risk: ["shell", "filesystem", "network"], approval: "on-side-effect", sandbox: "repo", production: "needs-live-test", costEffective: true, note: "No shell interpolation; production target adds command allowlists and transcript replay." },
     },
     async ({ command, args }) => {
       return runCommand(command, args ?? [], root, timeoutMs);

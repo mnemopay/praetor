@@ -29,6 +29,7 @@ export function registerIngestKb(reg: ToolRegistry, opts: IngestOptions): void {
         required: ["source", "title", "text"],
       },
       tags, allowedRoles,
+      metadata: { origin: "native", capability: "knowledge_ingest", risk: ["filesystem"], approval: "never", sandbox: "none", production: "needs-live-test", costEffective: true },
     },
     async ({ source, title, text }) => {
       const chunks = chunkText(text).map((t, i) => ({
