@@ -42,5 +42,8 @@
   "publishConfig": {
     "access": "public"
   },
-  "author": "Jerry <jerry@getbizsuite.com>"
+  "author": "Jerry <jerry@getbizsuite.com>",
+  "dependencies": {
+    "got-scraping": "^4.2.1"
+  }
 }

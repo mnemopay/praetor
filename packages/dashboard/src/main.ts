@@ -128,6 +128,65 @@ let activityPanel: ActivityPanel | null = null;
 let activityStream: ActivityStreamHandle | null = null;
 let activityMissionId: string | null = null;
 let selectedAgent: AgentChoice = "native";
+let cachedTools: ToolCatalogItem[] | null = null;
+
+async function fetchToolsOnce() {
+  if (cachedTools !== null) return;
+  try {
+    const res = await authedFetch("/api/v1/tools");
+    const payload = await res.json();
+    if (res.ok && payload.ok) {
+      cachedTools = payload.tools;
+    }
+  } catch (err) {
+    // silently fail
+  }
+}
+
+async function renderAgentToolsSummary() {
+  const summaryDiv = document.getElementById("agentToolsSummary");
+  if (!summaryDiv) return;
+  await fetchToolsOnce();
+  if (!cachedTools) return;
+
+  const agentTools = cachedTools.filter(t => t.allowedRoles.length === 0 || t.allowedRoles.includes(selectedAgent));
+  let mocks = 0;
+  let stubs = 0;
+  let adapters = 0;
+  const risks = new Set<string>();
+
+  for (const t of agentTools) {
+    const origin = t.metadata?.origin;
+    const prod = t.metadata?.production;
+    if (origin === "mock") mocks++;
+    if (origin === "adapter") adapters++;
+    if (prod === "stub") stubs++;
+    if (t.metadata?.risk) {
+      for (const r of t.metadata.risk) risks.add(r);
+    }
+  }
+
+  if (mocks === 0 && stubs === 0 && adapters === 0 && risks.size === 0) {
+    summaryDiv.innerHTML = "";
+    return;
+  }
+
+  const badges = [];
+  if (mocks > 0) badges.push(`<span class="tool-badge mock">${mocks} mock</span>`);
+  if (stubs > 0) badges.push(`<span class="tool-badge err">${stubs} stub</span>`);
+  if (adapters > 0) badges.push(`<span class="tool-badge warn">${adapters} adapter</span>`);
+  for (const r of risks) badges.push(`<span class="tool-badge risk-pill">${escapeHtml(r)}</span>`);
+
+  summaryDiv.innerHTML = `
+    <div class="tool-warning-banner">
+      <span class="warning-icon">⚠</span>
+      <div>
+        <strong>${agentTools.length} tools available</strong> to ${selectedAgent}
+        <div class="tool-badges mt-1">${badges.join("")}</div>
+      </div>
+    </div>
+  `;
+}
 
 void bootstrap();
 
@@ -351,6 +410,7 @@ function renderChat() {
           </select>
           <button class="btn-secondary activity-toggle" id="activityToggle" type="button">Activity</button>
         </div>
+        <div id="agentToolsSummary" class="agent-tools-summary"></div>
         <div class="chat-stream" id="chatStream">${renderChatMessages()}</div>
         <form id="chatForm" class="chat-form">
           <textarea id="chatInput" class="chat-input" rows="2" placeholder="Tell Praetor what to do — e.g. 'Generate an SEO audit for example.com and email it to me'"></textarea>
@@ -377,8 +437,10 @@ function renderChat() {
     agentPicker.value = selectedAgent;
     agentPicker.addEventListener("change", () => {
       selectedAgent = (agentPicker.value as AgentChoice);
+      void renderAgentToolsSummary();
     });
   }
+  void renderAgentToolsSummary();
 
   // Activity panel mount + slide-out toggle for narrow viewports.
   const activityHost = document.getElementById("activityList");

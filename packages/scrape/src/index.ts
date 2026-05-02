@@ -14,6 +14,8 @@
  *   - X.com cookie path (paywalled tweets are unreachable without `auth_token`)
  *   - per-host rate-limit + polite default User-Agent
  */
+import { gotScraping } from "got-scraping";
+
 export type ScrapeBackend = "fetch" | "playwright" | "crawl4ai" | "playwright-mcp" | "firecrawl";
 
 export interface ScrapeRequest {
@@ -109,42 +111,43 @@ const DEFAULT_UA =
  */
 export class FetchAdapter implements ScrapeAdapter {
   name: ScrapeBackend = "fetch";
+  constructor(private readonly gotScrapingImpl: typeof gotScraping = gotScraping) {}
   async fetch(req: ScrapeRequest): Promise<ScrapeResult> {
     const x = parseXStatusUrl(req.url);
     if (x && !req.headers?.Cookie) {
       return this.fetchXSyndication(req, x);
     }
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), req.timeoutMs ?? 15_000);
-    try {
-      const res = await fetch(req.url, {
-        headers: {
-          "user-agent": req.userAgent ?? DEFAULT_UA,
-          accept: "text/html,application/xhtml+xml,application/xml,application/json;q=0.9,*/*;q=0.8",
-          ...(req.headers ?? {}),
-        },
-        signal: ctrl.signal,
-      });
-      const body = await res.text();
-      const contentType = res.headers.get("content-type") ?? "";
-      const isHtml = /text\/html|xhtml/i.test(contentType);
-      const text = isHtml ? extractReadableText(body) : undefined;
-      const warnings = isHtml ? detectScrapeWarnings(body, text) : [];
-      return {
-        url: req.url,
-        status: res.status,
-        contentType,
-        body,
-        fetchedAt: new Date().toISOString(),
-        backend: this.name,
-        jsonLd: isHtml ? extractJsonLd(body) : undefined,
-        text,
-        evidence: isHtml ? extractPageEvidence(body, req.url, text) : undefined,
-        warnings,
-      };
-    } finally {
-      clearTimeout(t);
-    }
+    
+    const res = await this.gotScrapingImpl({
+      url: req.url,
+      headers: {
+        "user-agent": req.userAgent ?? DEFAULT_UA,
+        accept: "text/html,application/xhtml+xml,application/xml,application/json;q=0.9,*/*;q=0.8",
+        ...(req.headers ?? {}),
+      },
+      timeout: { request: req.timeoutMs ?? 15_000 },
+      retry: { limit: 1 },
+      throwHttpErrors: false,
+    });
+    
+    const body = res.body as string;
+    const contentType = (res.headers["content-type"] as string) ?? "";
+    const isHtml = /text\/html|xhtml/i.test(contentType);
+    const text = isHtml ? extractReadableText(body) : undefined;
+    const warnings = isHtml ? detectScrapeWarnings(body, text) : [];
+    
+    return {
+      url: req.url,
+      status: res.statusCode,
+      contentType,
+      body,
+      fetchedAt: new Date().toISOString(),
+      backend: this.name,
+      jsonLd: isHtml ? extractJsonLd(body) : undefined,
+      text,
+      evidence: isHtml ? extractPageEvidence(body, req.url, text) : undefined,
+      warnings,
+    };
   }
 
   /**
@@ -156,35 +159,35 @@ export class FetchAdapter implements ScrapeAdapter {
    */
   private async fetchXSyndication(req: ScrapeRequest, x: { id: string }): Promise<ScrapeResult> {
     const synURL = `https://cdn.syndication.twimg.com/tweet-result?id=${x.id}&token=a`;
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), req.timeoutMs ?? 15_000);
+    
+    const res = await this.gotScrapingImpl({
+      url: synURL,
+      headers: { "user-agent": req.userAgent ?? DEFAULT_UA, accept: "application/json" },
+      timeout: { request: req.timeoutMs ?? 15_000 },
+      retry: { limit: 1 },
+      throwHttpErrors: false,
+    });
+    
+    const body = res.body as string;
+    let text: string | undefined;
     try {
-      const res = await fetch(synURL, {
-        headers: { "user-agent": req.userAgent ?? DEFAULT_UA, accept: "application/json" },
-        signal: ctrl.signal,
-      });
-      const body = await res.text();
-      let text: string | undefined;
-      try {
-        const parsed = JSON.parse(body) as { text?: string; user?: { screen_name?: string; name?: string }; created_at?: string; favorite_count?: number; conversation_count?: number };
-        text = parsed.text
-          ? `@${parsed.user?.screen_name ?? "?"} (${parsed.user?.name ?? ""}) · ${parsed.created_at ?? ""}\n\n${parsed.text}\n\n♥ ${parsed.favorite_count ?? 0} · 💬 ${parsed.conversation_count ?? 0}`
-          : undefined;
-      } catch {
-        // body wasn't JSON; leave text undefined
-      }
-      return {
-        url: req.url,
-        status: res.status,
-        contentType: res.headers.get("content-type") ?? "application/json",
-        body,
-        fetchedAt: new Date().toISOString(),
-        backend: this.name,
-        text,
-      };
-    } finally {
-      clearTimeout(t);
+      const parsed = JSON.parse(body) as { text?: string; user?: { screen_name?: string; name?: string }; created_at?: string; favorite_count?: number; conversation_count?: number };
+      text = parsed.text
+        ? `@${parsed.user?.screen_name ?? "?"} (${parsed.user?.name ?? ""}) · ${parsed.created_at ?? ""}\n\n${parsed.text}\n\n♥ ${parsed.favorite_count ?? 0} · 💬 ${parsed.conversation_count ?? 0}`
+        : undefined;
+    } catch {
+      // body wasn't JSON; leave text undefined
     }
+    
+    return {
+      url: req.url,
+      status: res.statusCode,
+      contentType: (res.headers["content-type"] as string) ?? "application/json",
+      body,
+      fetchedAt: new Date().toISOString(),
+      backend: this.name,
+      text,
+    };
   }
 }
 

@@ -141,24 +141,20 @@ describe("Praetor scrape pack", () => {
 
   it("FetchAdapter rewrites x.com status URLs to the public syndication endpoint", async () => {
     const calls: string[] = [];
-    const orig = globalThis.fetch;
-    globalThis.fetch = (async (url: string) => {
-      calls.push(url);
-      return new Response(
-        JSON.stringify({ text: "hello world", user: { screen_name: "_fojcik", name: "Dominik" }, created_at: "2026-04-28T10:48:30.000Z", favorite_count: 599, conversation_count: 19 }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      );
-    }) as unknown as typeof fetch;
-    try {
-      const a = new FetchAdapter();
-      const r = await a.fetch({ url: "https://x.com/_fojcik/status/2049078294637596803?s=20" });
-      expect(calls[0]).toContain("cdn.syndication.twimg.com/tweet-result?id=2049078294637596803");
-      expect(r.text).toContain("@_fojcik");
-      expect(r.text).toContain("hello world");
-      expect(r.status).toBe(200);
-    } finally {
-      globalThis.fetch = orig;
-    }
+    const mockGot = async (opts: any) => {
+      calls.push(opts.url);
+      return {
+        body: JSON.stringify({ text: "hello world", user: { screen_name: "_fojcik", name: "Dominik" }, created_at: "2026-04-28T10:48:30.000Z", favorite_count: 599, conversation_count: 19 }),
+        statusCode: 200,
+        headers: { "content-type": "application/json" },
+      };
+    };
+    const a = new FetchAdapter(mockGot as any);
+    const r = await a.fetch({ url: "https://x.com/_fojcik/status/2049078294637596803?s=20" });
+    expect(calls[0]).toContain("cdn.syndication.twimg.com/tweet-result?id=2049078294637596803");
+    expect(r.text).toContain("@_fojcik");
+    expect(r.text).toContain("hello world");
+    expect(r.status).toBe(200);
   });
 
   it("scrape() routes through the requested backend", async () => {
