@@ -44,8 +44,10 @@ describe("renderer.dispatch", () => {
     expect(result.warnings.some((w) => w.kind === "stub")).toBe(true);
   });
   it("returns a stub for declared-but-unimplemented targets", () => {
-    const scene = makeScene({ targets: ["html", "video-mp4"] });
-    const result = render(scene, "video-mp4");
+    // spark-splat and godot-scene remain as typed stubs until their native
+    // emitters land. Add a `kind` arm here when one of them is implemented.
+    const scene = makeScene({ targets: ["html", "spark-splat"] });
+    const result = render(scene, "spark-splat");
     expect(result.files).toHaveLength(0);
     expect(result.warnings[0]?.kind).toBe("stub");
   });
@@ -193,6 +195,63 @@ describe("hyperframes-html target", () => {
   it("respects prefers-reduced-motion in runtime", () => {
     const r = render(hfScene(), "hyperframes-html");
     expect(r.files[0]?.contents).toContain("prefers-reduced-motion");
+  });
+});
+
+describe("video-mp4 target", () => {
+  function videoMp4Scene(): PraetorScene {
+    return {
+      ...makeScene(),
+      targets: ["video-mp4"],
+      video: { fps: 30, durationInFrames: 90, width: 1080, height: 1920 },
+    };
+  }
+  it("requires scene.video", () => {
+    const r = render({ ...makeScene(), targets: ["video-mp4"] }, "video-mp4");
+    expect(r.warnings.some((w) => w.kind === "missing-token")).toBe(true);
+  });
+  it("emits the react-remotion bundle plus render scripts + README", () => {
+    const r = render(videoMp4Scene(), "video-mp4");
+    const paths = r.files.map((f) => f.path);
+    expect(paths.some((p) => p.endsWith("/render.sh"))).toBe(true);
+    expect(paths.some((p) => p.endsWith("/render.cmd"))).toBe(true);
+    expect(paths.some((p) => p.endsWith("/README.md"))).toBe(true);
+    expect(paths.some((p) => p.endsWith("/src/Root.tsx"))).toBe(true);
+  });
+  it("render script invokes remotion render on the right composition", () => {
+    const r = render(videoMp4Scene(), "video-mp4");
+    const sh = r.files.find((f) => f.path.endsWith("render.sh"))?.contents ?? "";
+    expect(sh).toContain("npx --yes remotion@4 render src/index.ts test_hero out/test_hero.mp4");
+  });
+});
+
+describe("three-scene target", () => {
+  function threeScene(): PraetorScene {
+    return {
+      ...makeScene(),
+      targets: ["three-scene"],
+      assets: [{ source: "https://cdn.jsdelivr.net/npm/three@0.166.1/+esm", license: "MIT" }],
+    };
+  }
+  it("emits a single self-contained HTML", () => {
+    const r = render(threeScene(), "three-scene");
+    expect(r.files).toHaveLength(1);
+    expect(r.files[0]?.path).toContain("index.html");
+  });
+  it("uses the canonical particle ring config from tokens", () => {
+    const html = render(threeScene(), "three-scene").files[0]?.contents ?? "";
+    expect(html).toContain("const POINT_COUNT = 1800");
+    expect(html).toContain("const POINTER_LERP = 0.04");
+    expect(html).toContain("THREE.AdditiveBlending");
+  });
+  it("honors prefers-reduced-motion in the tick loop", () => {
+    const html = render(threeScene(), "three-scene").files[0]?.contents ?? "";
+    expect(html).toContain("prefers-reduced-motion");
+    expect(html).toContain("if (!reduceMotion)");
+  });
+  it("warns when three.js CDN provenance is missing", () => {
+    const r = render({ ...makeScene(), targets: ["three-scene"] /* no assets */ }, "three-scene");
+    expect(r.warnings.some((w) => w.kind === "missing-token" && w.message.includes("provenance"))).toBe(true);
   });
 });
 
