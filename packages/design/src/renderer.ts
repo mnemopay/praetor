@@ -76,12 +76,45 @@ function renderHtml(scene: PraetorScene): RenderResult {
     .map((layer) => renderLayer(layer, t))
     .join("\n");
 
+  const meta = scene.meta;
+  const title = meta?.title ?? scene.id;
+  const description = meta?.description ?? "";
+  const robots = meta?.robots ?? "index, follow, max-image-preview:large";
+  const canonical = meta?.canonicalUrl;
+  const ogImage = meta?.ogImageUrl ?? `${scene.id}/og.svg`;
+  const siteName = meta?.siteName ?? "Praetor";
+  const author = meta?.author ?? "Praetor";
+
+  const headTags: string[] = [
+    `<title>${escapeHtml(title)}</title>`,
+  ];
+  if (description) headTags.push(`<meta name="description" content="${escapeAttr(description)}" />`);
+  headTags.push(`<meta name="robots" content="${escapeAttr(robots)}" />`);
+  if (canonical) headTags.push(`<link rel="canonical" href="${escapeAttr(canonical)}" />`);
+  headTags.push(`<meta name="author" content="${escapeAttr(author)}" />`);
+  // Open Graph
+  headTags.push(`<meta property="og:type" content="website" />`);
+  headTags.push(`<meta property="og:title" content="${escapeAttr(title)}" />`);
+  if (description) headTags.push(`<meta property="og:description" content="${escapeAttr(description)}" />`);
+  if (canonical) headTags.push(`<meta property="og:url" content="${escapeAttr(canonical)}" />`);
+  headTags.push(`<meta property="og:image" content="${escapeAttr(ogImage)}" />`);
+  headTags.push(`<meta property="og:site_name" content="${escapeAttr(siteName)}" />`);
+  // Twitter Card
+  headTags.push(`<meta name="twitter:card" content="summary_large_image" />`);
+  headTags.push(`<meta name="twitter:title" content="${escapeAttr(title)}" />`);
+  if (description) headTags.push(`<meta name="twitter:description" content="${escapeAttr(description)}" />`);
+  headTags.push(`<meta name="twitter:image" content="${escapeAttr(ogImage)}" />`);
+  // JSON-LD blocks
+  for (const block of meta?.jsonLd ?? []) {
+    headTags.push(`<script type="application/ld+json">${JSON.stringify(block).replace(/</g, "\\u003c")}</script>`);
+  }
+
   const html = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(scene.id)}</title>
+  ${headTags.join("\n  ")}
   <style>
 ${cssVars}
 ${baseCss}
@@ -106,6 +139,13 @@ function renderBaseStylesheet(t: PraetorTokens): string {
   return `
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: ${t.typeScale.body.sizePx}px; line-height: ${t.typeScale.body.lineHeight}; }
+li { margin: 6px 0; }
+p > code, li > code { background: ${t.color.surface}; border: 1px solid ${t.color.border}; border-radius: 6px; padding: 1px 6px; font-family: var(--mono); font-size: 0.85em; color: var(--accent); }
+a { color: var(--accent); }
+section h1 + p, section h2 + p { margin-top: 12px; }
+.stage-card + .stage-card { margin-top: 18px; }
+.stage-card h2 { margin: 6px 0 12px 0; }
+.cta-pill { margin-right: 10px; }
 .praetor { min-height: 100vh; }
 section { padding: ${t.layout.sectionPaddingDesktopPx}px ${t.layout.gutterDesktopPx}px; max-width: ${t.layout.maxContentWidthPx}px; margin: 0 auto; }
 @media (max-width: 768px) {
@@ -169,6 +209,12 @@ function renderNode(node: SceneNode, t: PraetorTokens): string {
       return `<span class="eyebrow ${motionClass}">${childHtml}</span>`;
     case "p":
       return `<p class="${motionClass}">${childHtml}</p>`;
+    case "em":
+      return `<em>${childHtml}</em>`;
+    case "code":
+      return `<code>${childHtml}</code>`;
+    case "li":
+      return `<li>${childHtml}</li>`;
     case "cta-pill": {
       const href = String(node.props?.href ?? "#");
       return `<a class="cta-pill ${motionClass}" href="${escapeAttr(href)}">${childHtml}</a>`;
@@ -193,7 +239,7 @@ function renderNode(node: SceneNode, t: PraetorTokens): string {
       return `<pre class="${motionClass}" data-lang="${escapeAttr(lang)}"><code>${childHtml}</code></pre>`;
     }
     case "list":
-      return `<ul class="${motionClass}">${childHtml}</ul>`;
+      return `<ul class="${motionClass}" style="margin:0;padding-left:1.25em;">${childHtml}</ul>`;
     default:
       return `<!-- unknown node kind: ${escapeHtml(String(node.kind))} -->`;
   }
@@ -216,6 +262,20 @@ function renderMarkdown(scene: PraetorScene): RenderResult {
     warnings.push({ kind: "voice", message: `forbidden phrase: "${phrase}"`, pointer: "renderer.markdown" });
   }
   return { target: "markdown", files: [{ path: `${scene.id}.md`, contents: md }], warnings };
+}
+
+/** Walk a node tree and report kinds the renderer doesn't know yet. */
+function unknownKinds(node: SceneNode, acc: Set<string>): Set<string> {
+  const known = new Set([
+    "section","hero","h1","h2","lede","eyebrow","p","em","cta-pill","stage-card",
+    "ledger-row","status-gate","image","splat-viewer","three-canvas",
+    "remotion-scene","code","code-block","list","li",
+  ]);
+  if (!known.has(node.kind)) acc.add(node.kind);
+  for (const c of node.children ?? []) {
+    if (typeof c !== "string") unknownKinds(c, acc);
+  }
+  return acc;
 }
 
 function renderNodeMarkdown(node: SceneNode): string {

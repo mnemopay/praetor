@@ -59,6 +59,7 @@ export interface SceneNode {
     | "lede"
     | "eyebrow"
     | "p"
+    | "em"
     | "cta-pill"
     | "stage-card"
     | "ledger-row"
@@ -67,8 +68,10 @@ export interface SceneNode {
     | "splat-viewer"
     | "three-canvas"
     | "remotion-scene"
+    | "code"
     | "code-block"
-    | "list";
+    | "list"
+    | "li";
   /** Display props — colors, sizes, etc resolve to PraetorTokens at render
    * time. Renderers reject any inline hex codes. */
   props?: Record<string, unknown>;
@@ -152,11 +155,35 @@ export interface HyperframesComposition {
   schedule?: Record<string, { startMs: number; durationMs: number }>;
 }
 
+/** SEO + share metadata. Renderers emit `<title>`, `<meta name="description">`,
+ * Open Graph, Twitter Card, and JSON-LD blocks from this. Required for the
+ * html target so we don't ship a marketing surface with no metadata. */
+export interface SceneMeta {
+  /** `<title>` tag content. */
+  title: string;
+  /** `<meta name="description">`. Keep ≤160 chars for SERP safety. */
+  description: string;
+  /** Canonical URL the page will be deployed at. */
+  canonicalUrl?: string;
+  /** Author name (defaults to "Praetor"). */
+  author?: string;
+  /** Open Graph image URL — falls back to the og-image SVG file the renderer also emits. */
+  ogImageUrl?: string;
+  /** Site name for og:site_name. */
+  siteName?: string;
+  /** Optional JSON-LD blocks to inject verbatim. */
+  jsonLd?: Record<string, unknown>[];
+  /** Robots directive — defaults to `index, follow, max-image-preview:large`. */
+  robots?: string;
+}
+
 /** The full scene a charter hands the renderer. Tokens are required — every
  * renderer reads from this single token tree, never inline values. */
 export interface PraetorScene {
   /** Charter-author-friendly id ("homepage-hero", "audit-report-2026-05-03"). */
   id: string;
+  /** SEO + share metadata. Required when the html target ships to production. */
+  meta?: SceneMeta;
   /** Token tree — usually `tokens` from ./tokens, occasionally a brand override. */
   tokens: PraetorTokens;
   /** Layers composited from low to high zIndex. */
