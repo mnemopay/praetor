@@ -24,3 +24,9 @@ praetor-out
 
 # Stray nested checkout
 praetor/
+
+# Mission output artifacts (per-mission sandbox roots)
+.praetor/sandbox/
+.praetor/cache/
+out/
+hello.txt
