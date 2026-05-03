@@ -66,7 +66,7 @@ export async function getMissionLogs(missionId: string): Promise<string[]> {
     .eq("mission_id", missionId)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((row) => String((row as { line: string }).line));
+  return ((data ?? []) as Array<{ line: string }>).map((row) => String(row.line));
 }
 
 export async function listInstalledPlugins(userId: string): Promise<string[]> {
@@ -76,7 +76,7 @@ export async function listInstalledPlugins(userId: string): Promise<string[]> {
     .eq("user_id", userId)
     .order("installed_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((row) => String((row as { plugin_name: string }).plugin_name));
+  return ((data ?? []) as Array<{ plugin_name: string }>).map((row) => String(row.plugin_name));
 }
 
 export async function installPlugin(userId: string, pluginName: string): Promise<void> {
@@ -111,7 +111,7 @@ export async function getRecentActivity(
     .order("ts", { ascending: true })
     .limit(limit);
   if (error) throw error;
-  return (data ?? []).map((row) => (row as { payload: ActivityEvent }).payload);
+  return ((data ?? []) as Array<{ payload: ActivityEvent }>).map((row) => row.payload);
 }
 
 /** Resolve mission owner; used by the activity bus persistence subscriber. */

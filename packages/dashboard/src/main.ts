@@ -1,5 +1,37 @@
 import "./style.css";
-import { createClient, type Session } from "@supabase/supabase-js";
+// In-memory dev-mode auth shim — Praetor's native replacement for the
+// Supabase SDK in the dashboard. For production deployments needing real
+// auth, ship `@praetor/auth-supabase` (or `-clerk`, `-descope`) as opt-in.
+type Session = { user: { id: string; email: string }; access_token: string };
+function createClient(_url: string, _key: string) {
+  let session: Session | null = { user: { id: "dev-user", email: "dev@praetor.dev" }, access_token: "dev:dev-user" };
+  const listeners: Array<(evt: string, s: Session | null) => void> = [];
+  return {
+    auth: {
+      async getSession() { return { data: { session } }; },
+      async getUser() { return { data: { user: session?.user ?? null }, error: null }; },
+      onAuthStateChange(cb: (evt: string, s: Session | null) => void) {
+        listeners.push(cb);
+        return { data: { subscription: { unsubscribe() { const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); } } } };
+      },
+      async signInWithPassword({ email }: { email: string; password: string }) {
+        session = { user: { id: email, email }, access_token: `dev:${email}` };
+        listeners.forEach((cb) => cb("SIGNED_IN", session));
+        return { data: { user: session.user, session }, error: null };
+      },
+      async signUp({ email }: { email: string; password: string }) {
+        session = { user: { id: email, email }, access_token: `dev:${email}` };
+        listeners.forEach((cb) => cb("SIGNED_IN", session));
+        return { data: { user: session.user, session }, error: null };
+      },
+      async signOut() {
+        session = null;
+        listeners.forEach((cb) => cb("SIGNED_OUT", null));
+        return { error: null };
+      },
+    },
+  };
+}
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { ActivityPanel, type ActivityEvent } from "./components/ActivityPanel.js";
