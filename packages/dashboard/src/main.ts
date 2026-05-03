@@ -32,8 +32,7 @@ function createClient(_url: string, _key: string) {
     },
   };
 }
-import { marked } from "marked";
-import DOMPurify from "dompurify";
+import { renderMarkdown as praetorRenderMarkdown } from "./praetor_markdown.js";
 import { ActivityPanel, type ActivityEvent } from "./components/ActivityPanel.js";
 import { openActivityStream, type ActivityStreamHandle } from "./eventStream.js";
 
@@ -567,7 +566,7 @@ function renderChatMessages(): string {
   }
   return chatLog.map((m) => {
     const body = m.role === "praetor"
-      ? DOMPurify.sanitize(marked.parse(m.content, { async: false }) as string)
+      ? praetorRenderMarkdown(m.content)
       : escapeHtml(m.content);
     const status = m.status ? `<span class="status-pill ${statusClass(m.status)}">${m.status}</span>` : "";
     const link = m.missionId ? `<button class="link-btn" data-mission-id="${m.missionId}" data-msg-id="${m.id}">Open in Audit ↗</button>` : "";
