@@ -128,6 +128,74 @@ describe("email-html target", () => {
   });
 });
 
+describe("react-remotion target", () => {
+  function videoScene(): PraetorScene {
+    return {
+      ...makeScene(),
+      targets: ["react-remotion"],
+      video: { fps: 30, durationInFrames: 90, width: 1080, height: 1920 },
+    };
+  }
+  it("requires scene.video", () => {
+    const r = render({ ...makeScene(), targets: ["react-remotion"] }, "react-remotion");
+    expect(r.warnings.some((w) => w.kind === "missing-token")).toBe(true);
+    expect(r.files).toHaveLength(0);
+  });
+  it("emits index.ts + Root.tsx + Composition.tsx + remotion.config.cjs", () => {
+    const r = render(videoScene(), "react-remotion");
+    const paths = r.files.map((f) => f.path).sort();
+    expect(paths.some((p) => p.endsWith("/src/index.ts"))).toBe(true);
+    expect(paths.some((p) => p.endsWith("/src/Root.tsx"))).toBe(true);
+    expect(paths.some((p) => p.endsWith(".tsx"))).toBe(true);
+    expect(paths.some((p) => p.endsWith("/remotion.config.cjs"))).toBe(true);
+  });
+  it("imports tokens from @praetor/design/tokens", () => {
+    const r = render(videoScene(), "react-remotion");
+    const composition = r.files.find((f) => f.path.endsWith(".tsx") && !f.path.endsWith("Root.tsx"))?.contents ?? "";
+    expect(composition).toContain('from "@praetor/design/tokens"');
+    expect(composition).not.toMatch(/#[0-9a-f]{6}/i); // no inline hex
+  });
+  it("registers Composition with the right fps/duration/dimensions", () => {
+    const r = render(videoScene(), "react-remotion");
+    const root = r.files.find((f) => f.path.endsWith("Root.tsx"))?.contents ?? "";
+    expect(root).toContain("durationInFrames={90}");
+    expect(root).toContain("fps={30}");
+    expect(root).toContain("width={1080}");
+    expect(root).toContain("height={1920}");
+  });
+});
+
+describe("hyperframes-html target", () => {
+  function hfScene(): PraetorScene {
+    return {
+      ...makeScene(),
+      targets: ["hyperframes-html"],
+      hyperframes: { defaultDurationMs: 2000, loop: true },
+      layers: [
+        { id: "f1", kind: "html", zIndex: 1, content: { kind: "h1", children: ["one"] } },
+        { id: "f2", kind: "html", zIndex: 2, content: { kind: "h1", children: ["two"] } },
+      ],
+    };
+  }
+  it("requires scene.hyperframes", () => {
+    const r = render({ ...makeScene(), targets: ["hyperframes-html"] }, "hyperframes-html");
+    expect(r.warnings.some((w) => w.kind === "missing-token")).toBe(true);
+  });
+  it("emits index.html with data-start + data-duration on each frame", () => {
+    const r = render(hfScene(), "hyperframes-html");
+    const html = r.files[0]?.contents ?? "";
+    expect(html).toContain('data-frame="f1"');
+    expect(html).toContain('data-frame="f2"');
+    expect(html).toContain('data-start="0"');
+    expect(html).toContain('data-start="2000"');
+    expect(html).toContain('data-duration="2000"');
+  });
+  it("respects prefers-reduced-motion in runtime", () => {
+    const r = render(hfScene(), "hyperframes-html");
+    expect(r.files[0]?.contents).toContain("prefers-reduced-motion");
+  });
+});
+
 describe("scene audit", () => {
   it("flags multiple three-scene layers", () => {
     const scene = makeScene({

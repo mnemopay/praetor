@@ -122,6 +122,36 @@ export interface AssetProvenance {
   contentHash?: string;
 }
 
+/** Optional video-composition block for react-remotion + video-mp4 targets. */
+export interface VideoComposition {
+  /** Frame rate (typically 30 or 60). */
+  fps: number;
+  /** Total duration in frames. */
+  durationInFrames: number;
+  /** Width × height in pixels (1080×1920 for 9:16, 1920×1080 for 16:9). */
+  width: number;
+  height: number;
+  /** Optional per-scene clipping. Each entry maps a layer to a frame window. */
+  cuts?: Array<{
+    /** Layer id from `scene.layers`. */
+    layerId: string;
+    /** Start frame (inclusive). */
+    from: number;
+    /** End frame (exclusive). */
+    to: number;
+  }>;
+}
+
+/** Optional hyperframes-composition block for hyperframes-html target. */
+export interface HyperframesComposition {
+  /** Default per-frame duration in milliseconds when a layer doesn't set its own. */
+  defaultDurationMs: number;
+  /** Loop the sequence after the last frame. */
+  loop?: boolean;
+  /** Optional per-layer overrides (`{ layerId: { startMs, durationMs } }`). */
+  schedule?: Record<string, { startMs: number; durationMs: number }>;
+}
+
 /** The full scene a charter hands the renderer. Tokens are required — every
  * renderer reads from this single token tree, never inline values. */
 export interface PraetorScene {
@@ -137,6 +167,10 @@ export interface PraetorScene {
   assets: AssetProvenance[];
   /** Targets this scene supports; the renderer rejects any other target. */
   targets: RendererTarget[];
+  /** Required when `targets` includes `react-remotion` or `video-mp4`. */
+  video?: VideoComposition;
+  /** Required when `targets` includes `hyperframes-html`. */
+  hyperframes?: HyperframesComposition;
 }
 
 /** Sensible defaults so charter authors don't have to wire everything. */
