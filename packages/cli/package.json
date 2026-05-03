@@ -32,7 +32,7 @@
     "@praetor/world-gen": "*",
     "yaml": "^2.5.0"
   },
-  "author": "Jerry <jerry@getbizsuite.com>",
+  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

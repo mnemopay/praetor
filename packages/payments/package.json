@@ -13,7 +13,7 @@
   "peerDependencies": {
     "@mnemopay/sdk": "^1.4.2"
   },
-  "author": "Jerry <jerry@getbizsuite.com>",
+  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

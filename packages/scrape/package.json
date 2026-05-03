@@ -42,7 +42,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "author": "Jerry <jerry@getbizsuite.com>",
+  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
   "dependencies": {
     "got-scraping": "^4.2.1"
   }

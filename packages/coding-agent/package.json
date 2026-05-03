@@ -36,10 +36,11 @@
     "README.md",
     "LICENSE"
   ],
-  "author": "Jerry <jerry@getbizsuite.com>",
+  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mnemopay/praetor.git"
+    "url": "https://github.com/mnemopay/praetor.git",
+    "directory": "packages/coding-agent"
   }
 }
