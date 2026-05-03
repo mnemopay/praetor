@@ -64,6 +64,76 @@ export function render(scene: PraetorScene, target: RendererTarget): RenderResul
   }
 }
 
+/* ---------- Praetor scroll + reveal runtime (auto-injected) ------------- */
+
+/** Self-contained runtime emitted at the bottom of every html target.
+ * Owns: Lenis smooth-scroll (via importmap), IntersectionObserver reveal
+ * class flip, before-after drag-reveal, accordion smooth-height, sticky-nav
+ * scroll-shadow, carousel scroll-snap dot indicators. ~3KB minified, zero
+ * runtime deps beyond the browser + Lenis ESM. */
+const PRAETOR_RUNTIME = `
+<script type="importmap">{"imports":{"lenis":"https://cdn.jsdelivr.net/npm/lenis@1.1.13/+esm"}}</script>
+<script type="module">
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+if (!reduce) {
+  const Lenis = (await import("lenis")).default;
+  new Lenis({ lerp: 0.1, duration: 1.2, smoothWheel: true, autoRaf: true });
+}
+const io = new IntersectionObserver(
+  (entries) => entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); } }),
+  { rootMargin: "0px 0px -8% 0px", threshold: 0 }
+);
+document.querySelectorAll(".reveal,[class*='reveal-d']").forEach((el) => io.observe(el));
+
+// Sticky nav: drop a hairline shadow after 64px of scroll.
+const nav = document.querySelector(".praetor-sticky-nav");
+if (nav) {
+  const onScroll = () => nav.classList.toggle("scrolled", window.scrollY > 64);
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+}
+
+// Before/after drag reveal — pointer-driven, no deps.
+document.querySelectorAll(".praetor-ba").forEach((root) => {
+  const handle = root.querySelector(".praetor-ba-handle");
+  const after = root.querySelector(".praetor-ba-after");
+  let dragging = false;
+  const update = (clientX) => {
+    const rect = root.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+    handle.style.left = pct + "%";
+    after.style.clipPath = "inset(0 0 0 " + pct + "%)";
+  };
+  root.addEventListener("pointerdown", (e) => { dragging = true; root.setPointerCapture(e.pointerId); update(e.clientX); });
+  root.addEventListener("pointermove", (e) => { if (dragging) update(e.clientX); });
+  root.addEventListener("pointerup", () => { dragging = false; });
+  root.addEventListener("pointercancel", () => { dragging = false; });
+});
+
+// Accordion smooth-height (works on top of native <details>).
+document.querySelectorAll(".praetor-accordion details").forEach((d) => {
+  const body = d.querySelector(".praetor-accordion-body");
+  if (!body) return;
+  d.addEventListener("toggle", () => {
+    body.style.maxHeight = d.open ? body.scrollHeight + "px" : "0px";
+  });
+});
+
+// Carousel dots: light up the dot for the visible card.
+document.querySelectorAll(".praetor-carousel").forEach((root) => {
+  const track = root.querySelector(".praetor-carousel-track");
+  const dots = root.querySelectorAll(".praetor-carousel-dot");
+  if (!track || !dots.length) return;
+  const update = () => {
+    const i = Math.round(track.scrollLeft / track.clientWidth);
+    dots.forEach((dot, idx) => dot.classList.toggle("active", idx === i));
+  };
+  track.addEventListener("scroll", update, { passive: true });
+  update();
+});
+</script>
+`;
+
 /* ---------- HTML target -------------------------------------------------- */
 
 function renderHtml(scene: PraetorScene): RenderResult {
@@ -122,6 +192,7 @@ ${baseCss}
 </head>
 <body class="praetor">
 ${body}
+${PRAETOR_RUNTIME}
 </body>
 </html>
 `;
@@ -146,6 +217,79 @@ section h1 + p, section h2 + p { margin-top: 12px; }
 .stage-card + .stage-card { margin-top: 18px; }
 .stage-card h2 { margin: 6px 0 12px 0; }
 .cta-pill { margin-right: 10px; }
+
+/* ---------- v2 motion primitives ---------- */
+.praetor-sticky-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; backdrop-filter: ${t.components.navBackdrop.backdropFilter}; background: ${t.components.navBackdrop.bg}; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; transition: box-shadow var(--hover-ms) var(--ease); }
+.praetor-sticky-nav.scrolled { box-shadow: 0 1px 0 ${t.color.border}, 0 8px 24px rgba(0,0,0,0.04); }
+.praetor-sticky-nav-brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; color: ${t.color.text}; text-decoration: none; }
+.praetor-sticky-nav-actions { display: inline-flex; gap: 10px; }
+body { padding-top: 64px; }
+
+.praetor-image-hero { position: relative; width: 100%; min-height: 70vh; display: flex; align-items: center; justify-content: flex-start; overflow: hidden; isolation: isolate; }
+.praetor-image-hero > picture, .praetor-image-hero > video { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+.praetor-image-hero img, .praetor-image-hero video { width: 100%; height: 100%; object-fit: cover; }
+.praetor-image-hero .hero-scrim { position: absolute; inset: 0; z-index: 0; background: linear-gradient(135deg, rgba(0,0,0,0.55), rgba(0,0,0,0.15) 60%, rgba(0,0,0,0.05)); }
+.praetor-image-hero > .praetor-glass { position: relative; z-index: 1; max-width: 720px; margin: 0 var(--gutter-desktop); }
+@media (max-width: 768px) { .praetor-image-hero > .praetor-glass { margin: 0 var(--gutter-mobile); } }
+@media (prefers-reduced-motion: no-preference) {
+  .praetor-image-hero img { animation: praetor-kenburns 18s var(--ease) infinite alternate; }
+}
+@keyframes praetor-kenburns { from { transform: scale(1.02) translateY(0); } to { transform: scale(1.08) translateY(-2%); } }
+
+.praetor-glass { background: ${t.components.glassCard.bg}; backdrop-filter: ${t.components.glassCard.backdropFilter}; border: ${t.components.glassCard.border}; border-radius: ${t.layout.cardRadiusPx}px; padding: 28px; }
+
+.praetor-ba { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: ${t.layout.cardRadiusPx}px; overflow: hidden; cursor: ew-resize; user-select: none; touch-action: none; }
+.praetor-ba img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.praetor-ba .praetor-ba-after { clip-path: inset(0 0 0 50%); }
+.praetor-ba .praetor-ba-handle { position: absolute; top: 0; bottom: 0; left: 50%; width: 2px; background: ${t.color.accent}; transform: translateX(-1px); pointer-events: none; }
+.praetor-ba .praetor-ba-handle::before { content: "↔"; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 36px; height: 36px; border-radius: 999px; background: ${t.color.accent}; color: ${t.components.ctaPill.foreground}; display: flex; align-items: center; justify-content: center; font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+.praetor-ba-label { position: absolute; top: 12px; padding: 4px 10px; background: rgba(0,0,0,0.6); color: white; font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; border-radius: 999px; pointer-events: none; }
+.praetor-ba-label.before { left: 12px; }
+.praetor-ba-label.after { right: 12px; }
+
+.praetor-marquee { width: 100%; overflow: hidden; mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent); }
+.praetor-marquee-track { display: flex; gap: 36px; animation: praetor-marquee 40s linear infinite; width: max-content; }
+.praetor-marquee:hover .praetor-marquee-track { animation-play-state: paused; }
+.praetor-marquee-track > * { flex: 0 0 auto; opacity: 0.85; transition: opacity var(--hover-ms) var(--ease); }
+.praetor-marquee-track > *:hover { opacity: 1; }
+@keyframes praetor-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .praetor-marquee-track { animation: none; } }
+
+.praetor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+.praetor-grid > * { background: linear-gradient(180deg, var(--surface), var(--surface2)); border: 1px solid var(--border); border-radius: ${t.layout.cardRadiusPx}px; overflow: hidden; transition: transform var(--hover-ms) var(--ease), border-color var(--hover-ms) var(--ease); }
+.praetor-grid > *:hover { transform: translateY(-4px); border-color: ${t.components.stageCard.hoverBorder}; }
+.praetor-grid img { width: 100%; aspect-ratio: 4/3; object-fit: cover; transition: transform var(--hover-ms) var(--ease); }
+.praetor-grid > *:hover img { transform: scale(1.04); }
+.praetor-grid .praetor-grid-body { padding: 18px; }
+
+.praetor-accordion details { background: var(--surface); border: 1px solid var(--border); border-radius: ${t.layout.cardRadiusPx}px; padding: 14px 18px; margin-bottom: 10px; }
+.praetor-accordion summary { cursor: pointer; font-weight: 600; list-style: none; padding-right: 32px; position: relative; color: var(--text); }
+.praetor-accordion summary::-webkit-details-marker { display: none; }
+.praetor-accordion summary::after { content: "+"; position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 22px; color: var(--accent); transition: transform var(--hover-ms) var(--ease); }
+.praetor-accordion details[open] summary::after { transform: translateY(-50%) rotate(45deg); }
+.praetor-accordion-body { overflow: hidden; max-height: 0; transition: max-height var(--reveal-ms) var(--ease); padding-top: 0; }
+.praetor-accordion details[open] .praetor-accordion-body { padding-top: 12px; }
+@media (prefers-reduced-motion: reduce) { .praetor-accordion-body { transition: none; max-height: none !important; } }
+
+.praetor-carousel { position: relative; }
+.praetor-carousel-track { display: flex; gap: 18px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; padding-bottom: 16px; }
+.praetor-carousel-track::-webkit-scrollbar { display: none; }
+.praetor-carousel-track > * { flex: 0 0 100%; scroll-snap-align: start; }
+@media (min-width: 768px) { .praetor-carousel-track > * { flex: 0 0 calc(50% - 9px); } }
+@media (min-width: 1100px) { .praetor-carousel-track > * { flex: 0 0 calc(33.333% - 12px); } }
+.praetor-carousel-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+.praetor-carousel-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--border); border: 0; padding: 0; cursor: pointer; }
+.praetor-carousel-dot.active { background: var(--accent); }
+
+.praetor-review { background: var(--surface); border: 1px solid var(--border); border-radius: ${t.layout.cardRadiusPx}px; padding: 22px; }
+.praetor-review .praetor-stars { display: inline-flex; gap: 2px; color: ${t.color.accent2}; font-size: 18px; margin-bottom: 8px; }
+.praetor-review .review-quote { font-family: var(--serif); font-style: italic; font-size: 17px; line-height: 1.5; color: var(--text); margin: 8px 0 14px; }
+.praetor-review .review-attribution { color: var(--muted); font-size: 13px; font-family: var(--mono); }
+
+.praetor-map { width: 100%; aspect-ratio: 16 / 9; border-radius: ${t.layout.cardRadiusPx}px; overflow: hidden; border: 1px solid var(--border); position: relative; background: var(--surface2); }
+.praetor-map svg { width: 100%; height: 100%; display: block; }
+.praetor-map-dot { fill: ${t.color.accent}; }
+.praetor-map-label { font-family: var(--mono); font-size: 11px; fill: var(--text); }
 .praetor { min-height: 100vh; }
 section { padding: ${t.layout.sectionPaddingDesktopPx}px ${t.layout.gutterDesktopPx}px; max-width: ${t.layout.maxContentWidthPx}px; margin: 0 auto; }
 @media (max-width: 768px) {
@@ -203,6 +347,8 @@ function renderNode(node: SceneNode, t: PraetorTokens): string {
       return `<h1 class="${motionClass}">${childHtml}</h1>`;
     case "h2":
       return `<h2 class="${motionClass}">${childHtml}</h2>`;
+    case "h3":
+      return `<h3 class="${motionClass}">${childHtml}</h3>`;
     case "lede":
       return `<p class="lede ${motionClass}">${childHtml}</p>`;
     case "eyebrow":
@@ -232,7 +378,97 @@ function renderNode(node: SceneNode, t: PraetorTokens): string {
     case "image": {
       const src = String(node.props?.src ?? "");
       const alt = String(node.props?.alt ?? "");
-      return `<img class="${motionClass}" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" loading="lazy" />`;
+      const eager = Boolean(node.props?.eager);
+      const sizes = String(node.props?.sizes ?? "(min-width: 1024px) 1024px, 100vw");
+      // If src has a path/extension hint, emit <picture> with avif + webp variants by convention.
+      // Charters supply only the base path; the renderer assumes the asset pipeline produced
+      // matching .avif / .webp at 480/768/1280/1920 widths.
+      const m = src.match(/^(.*?)(\.(?:jpg|jpeg|png))$/i);
+      if (m) {
+        const base = m[1];
+        const widths = [480, 768, 1280, 1920];
+        const srcset = (ext: string) => widths.map((w) => `${base}-${w}w.${ext} ${w}w`).join(", ");
+        const loading = eager ? "eager" : "lazy";
+        const fetchpriority = eager ? "high" : "auto";
+        return `<picture class="${motionClass}"><source type="image/avif" srcset="${srcset("avif")}" sizes="${escapeAttr(sizes)}" /><source type="image/webp" srcset="${srcset("webp")}" sizes="${escapeAttr(sizes)}" /><img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" loading="${loading}" fetchpriority="${fetchpriority}" decoding="async" /></picture>`;
+      }
+      const loading = eager ? "eager" : "lazy";
+      return `<img class="${motionClass}" src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" loading="${loading}" decoding="async" />`;
+    }
+    case "sticky-nav": {
+      const brand = String(node.props?.brand ?? "");
+      const brandHref = String(node.props?.brandHref ?? "/");
+      return `<nav class="praetor-sticky-nav"><a class="praetor-sticky-nav-brand" href="${escapeAttr(brandHref)}"><span class="brand-dot"></span>${escapeHtml(brand)}</a><div class="praetor-sticky-nav-actions">${childHtml}</div></nav>`;
+    }
+    case "image-hero": {
+      const src = String(node.props?.src ?? "");
+      const alt = String(node.props?.alt ?? "");
+      const videoSrc = String(node.props?.video ?? "");
+      const poster = String(node.props?.poster ?? src);
+      let media = "";
+      if (videoSrc) {
+        media = `<video autoplay muted loop playsinline preload="metadata"${poster ? ` poster="${escapeAttr(poster)}"` : ""}><source src="${escapeAttr(videoSrc)}" type="video/mp4" /></video>`;
+      } else if (src) {
+        const m = src.match(/^(.*?)(\.(?:jpg|jpeg|png))$/i);
+        if (m) {
+          const base = m[1];
+          const widths = [768, 1280, 1920, 2560];
+          const srcset = (ext: string) => widths.map((w) => `${base}-${w}w.${ext} ${w}w`).join(", ");
+          media = `<picture><source type="image/avif" srcset="${srcset("avif")}" /><source type="image/webp" srcset="${srcset("webp")}" /><img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" loading="eager" fetchpriority="high" /></picture>`;
+        } else {
+          media = `<img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" loading="eager" fetchpriority="high" />`;
+        }
+      }
+      return `<section class="praetor-image-hero ${motionClass}">${media}<div class="hero-scrim"></div><div class="praetor-glass">${childHtml}</div></section>`;
+    }
+    case "before-after": {
+      const before = String(node.props?.before ?? "");
+      const after = String(node.props?.after ?? "");
+      const beforeAlt = String(node.props?.beforeAlt ?? "before");
+      const afterAlt = String(node.props?.afterAlt ?? "after");
+      return `<div class="praetor-ba ${motionClass}"><img src="${escapeAttr(before)}" alt="${escapeAttr(beforeAlt)}" loading="lazy" decoding="async" /><img class="praetor-ba-after" src="${escapeAttr(after)}" alt="${escapeAttr(afterAlt)}" loading="lazy" decoding="async" /><span class="praetor-ba-label before">Before</span><span class="praetor-ba-label after">After</span><div class="praetor-ba-handle"></div></div>`;
+    }
+    case "marquee-strip":
+      // Children are rendered, then duplicated in-DOM so the loop has no visible seam.
+      return `<div class="praetor-marquee ${motionClass}"><div class="praetor-marquee-track">${childHtml}${childHtml}</div></div>`;
+    case "glass-card":
+      return `<div class="praetor-glass ${motionClass}">${childHtml}</div>`;
+    case "accordion":
+      return `<div class="praetor-accordion ${motionClass}">${childHtml}</div>`;
+    case "accordion-item": {
+      const summary = String(node.props?.summary ?? "");
+      return `<details><summary>${escapeHtml(summary)}</summary><div class="praetor-accordion-body">${childHtml}</div></details>`;
+    }
+    case "progressive-cards":
+      return `<div class="praetor-grid ${motionClass}">${childHtml}</div>`;
+    case "carousel": {
+      // Children are review-card or any block element. Add dots automatically.
+      const count = (node.children ?? []).filter((c) => typeof c !== "string").length;
+      const dots = Array.from({ length: count }, (_, i) =>
+        `<button class="praetor-carousel-dot${i === 0 ? " active" : ""}" aria-label="card ${i + 1}"></button>`
+      ).join("");
+      return `<div class="praetor-carousel ${motionClass}"><div class="praetor-carousel-track">${childHtml}</div><div class="praetor-carousel-dots">${dots}</div></div>`;
+    }
+    case "review-card": {
+      const stars = Number(node.props?.stars ?? 5);
+      const author = String(node.props?.author ?? "");
+      const city = String(node.props?.city ?? "");
+      const starGlyphs = "★".repeat(Math.max(0, Math.min(5, stars))) + "☆".repeat(5 - Math.max(0, Math.min(5, stars)));
+      return `<article class="praetor-review"><span class="praetor-stars" aria-label="${stars} of 5 stars">${starGlyphs}</span><blockquote class="review-quote">${childHtml}</blockquote><footer class="review-attribution">${escapeHtml(author)}${city ? ` · ${escapeHtml(city)}` : ""}</footer></article>`;
+    }
+    case "stars": {
+      const n = Number(node.props?.n ?? 5);
+      const glyphs = "★".repeat(Math.max(0, Math.min(5, n))) + "☆".repeat(5 - Math.max(0, Math.min(5, n)));
+      return `<span class="praetor-stars" aria-label="${n} of 5 stars">${glyphs}</span>`;
+    }
+    case "map-embed": {
+      // Render an SVG-based DFW outline with city pins. Mapbox path is a future
+      // upgrade — the SVG fallback works offline + has zero external deps.
+      const cities = (node.props?.cities ?? []) as Array<{ name: string; x: number; y: number; href?: string }>;
+      const pins = cities.map((c) =>
+        `<g class="praetor-map-pin"><circle class="praetor-map-dot" cx="${c.x}" cy="${c.y}" r="6"><title>${escapeHtml(c.name)}</title></circle><text class="praetor-map-label" x="${c.x + 10}" y="${c.y + 4}">${escapeHtml(c.name)}</text></g>`
+      ).join("");
+      return `<div class="praetor-map ${motionClass}"><svg viewBox="0 0 400 225" role="img" aria-label="Service area map"><rect x="0" y="0" width="400" height="225" fill="${escapeAttr(t.color.surface2)}" /><path d="M30,40 L370,40 L370,200 L30,200 Z" fill="none" stroke="${escapeAttr(t.color.border)}" stroke-width="1" /><text x="200" y="25" text-anchor="middle" class="praetor-map-label">DFW Service Area</text>${pins}</svg></div>`;
     }
     case "code-block": {
       const lang = String(node.props?.lang ?? "");

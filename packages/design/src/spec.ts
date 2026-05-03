@@ -56,6 +56,7 @@ export interface SceneNode {
     | "hero"
     | "h1"
     | "h2"
+    | "h3"
     | "lede"
     | "eyebrow"
     | "p"
@@ -71,7 +72,20 @@ export interface SceneNode {
     | "code"
     | "code-block"
     | "list"
-    | "li";
+    | "li"
+    | "sticky-nav"
+    | "image-hero"
+    | "video-hero"
+    | "before-after"
+    | "map-embed"
+    | "marquee-strip"
+    | "glass-card"
+    | "accordion"
+    | "accordion-item"
+    | "progressive-cards"
+    | "carousel"
+    | "review-card"
+    | "stars";
   /** Display props — colors, sizes, etc resolve to PraetorTokens at render
    * time. Renderers reject any inline hex codes. */
   props?: Record<string, unknown>;
