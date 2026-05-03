@@ -28,9 +28,12 @@ export async function startMissionRun(missionId: string, charter: Charter): Prom
   await writeFile(charterPath, toYaml(charter), "utf-8");
 
   const logStream = createWriteStream(logPath, { flags: "a" });
-  const child = spawn("npx", ["praetor", "run", charterPath], {
+  // Spawn the CLI directly. `npx praetor` triggers npm's bin-resolution
+  // shim which races on Windows + fails when the global bin isn't linked
+  // (which is the default when Praetor is consumed as a workspace dep).
+  const cliPath = join(env.repoRoot, "packages", "cli", "dist", "index.js");
+  const child = spawn(process.execPath, [cliPath, "run", charterPath], {
     cwd: env.repoRoot,
-    shell: true,
     env: { ...process.env, PRAETOR_MISSION_ID: missionId },
   });
   activeMissionPids.set(missionId, child.pid ?? 0);

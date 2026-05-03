@@ -38,22 +38,33 @@ alter table public.mission_logs enable row level security;
 alter table public.plugin_installs enable row level security;
 alter table public.billing_snapshots enable row level security;
 
-create policy if not exists "missions_select_own"
+-- Postgres rejects `create policy if not exists`. Drop+create is idempotent.
+drop policy if exists "missions_select_own" on public.missions;
+drop policy if exists "missions_insert_own" on public.missions;
+drop policy if exists "missions_update_own" on public.missions;
+drop policy if exists "mission_logs_select_own" on public.mission_logs;
+drop policy if exists "mission_logs_insert_own" on public.mission_logs;
+drop policy if exists "plugins_select_own" on public.plugin_installs;
+drop policy if exists "plugins_insert_own" on public.plugin_installs;
+drop policy if exists "billing_select_own" on public.billing_snapshots;
+drop policy if exists "billing_insert_own" on public.billing_snapshots;
+
+create policy "missions_select_own"
 on public.missions for select
 to authenticated
 using (auth.uid() = user_id);
 
-create policy if not exists "missions_insert_own"
+create policy "missions_insert_own"
 on public.missions for insert
 to authenticated
 with check (auth.uid() = user_id);
 
-create policy if not exists "missions_update_own"
+create policy "missions_update_own"
 on public.missions for update
 to authenticated
 using (auth.uid() = user_id);
 
-create policy if not exists "mission_logs_select_own"
+create policy "mission_logs_select_own"
 on public.mission_logs for select
 to authenticated
 using (
@@ -63,7 +74,7 @@ using (
   )
 );
 
-create policy if not exists "mission_logs_insert_own"
+create policy "mission_logs_insert_own"
 on public.mission_logs for insert
 to authenticated
 with check (
@@ -73,22 +84,22 @@ with check (
   )
 );
 
-create policy if not exists "plugins_select_own"
+create policy "plugins_select_own"
 on public.plugin_installs for select
 to authenticated
 using (auth.uid() = user_id);
 
-create policy if not exists "plugins_insert_own"
+create policy "plugins_insert_own"
 on public.plugin_installs for insert
 to authenticated
 with check (auth.uid() = user_id);
 
-create policy if not exists "billing_select_own"
+create policy "billing_select_own"
 on public.billing_snapshots for select
 to authenticated
 using (auth.uid() = user_id);
 
-create policy if not exists "billing_insert_own"
+create policy "billing_insert_own"
 on public.billing_snapshots for insert
 to authenticated
 with check (auth.uid() = user_id);
