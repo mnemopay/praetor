@@ -1,0 +1,26 @@
+{
+  "name": "@praetor/game",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Praetor web-native game engine. A charter declares a GameSpec; the renderer emits a single self-contained HTML game playable in any browser. Companion to @praetor/game-assets (Godot scaffolder).",
+  "keywords": ["game", "engine", "web", "praetor", "charter"],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mnemopay/praetor.git",
+    "directory": "packages/game"
+  },
+  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>"
+}

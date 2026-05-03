@@ -38,9 +38,9 @@ export interface GameAssetSpec {
   sfxNames?: string[];
 }
 
-export type ConceptBackend = "openai-image" | "fal-flux" | "pollinations" | "reuse";
-export type SpriteBackend = "nano-banana-bg-removed" | "openai-image" | "pollinations" | "aseprite-template" | "reuse";
-export type TextureBackend = "fal-flux-tileable" | "noise-procedural" | "reuse";
+export type ConceptBackend = "openai-image" | "fal-flux" | "pollinations" | "replicate-flux-schnell" | "replicate-flux-dev" | "reuse";
+export type SpriteBackend = "nano-banana-bg-removed" | "openai-image" | "pollinations" | "aseprite-template" | "replicate-flux-schnell" | "reuse";
+export type TextureBackend = "fal-flux-tileable" | "noise-procedural" | "replicate-flux-schnell" | "reuse";
 export type MusicBackend = "suno-api" | "elevenlabs-music" | "royalty-free-pack" | "silent";
 export type SfxBackend = "elevenlabs-sfx" | "sfxr-presets" | "silent";
 export type CodeBackend = "anthropic-claude" | "static-template";
@@ -101,13 +101,17 @@ export function priceOf(b: GameBackends, spec: GameAssetSpec): number {
   const concept =
     b.concept === "openai-image" ? 0.04
     : b.concept === "fal-flux" ? 0.025
+    : b.concept === "replicate-flux-schnell" ? 0.003
+    : b.concept === "replicate-flux-dev" ? 0.025
     : 0;
   const sprite =
     b.sprite === "nano-banana-bg-removed" ? sprites * 0.04
     : b.sprite === "openai-image" ? sprites * 0.04
+    : b.sprite === "replicate-flux-schnell" ? sprites * 0.003
     : 0;
   const texture =
     b.texture === "fal-flux-tileable" ? tiles * 0.025
+    : b.texture === "replicate-flux-schnell" ? tiles * 0.003
     : 0;
   const music =
     b.music === "suno-api" ? 0.30
@@ -185,6 +189,95 @@ class ReuseConcept implements ConceptAdapter {
     await mkdir(dirname(p), { recursive: true });
     await writeFile(p, TRANSPARENT_PNG);
     return { imagePath: p };
+  }
+}
+
+/* ---------- Replicate FLUX adapter (paid path) ---------------------------
+ * Uses the Replicate API with the FLUX schnell model — $0.003/image, fast,
+ * fits Praetor's $0.10-per-charter budget envelope. Tagged origin: "adapter"
+ * — never the default. Skips silently if REPLICATE_API_TOKEN is unset (so
+ * the free-tier path keeps working when API credits dry up).
+ *
+ * Auth: REPLICATE_API_TOKEN env var. Endpoint: api.replicate.com/v1/predictions.
+ * Polls the prediction until status === "succeeded", downloads the generated
+ * image, writes to the output path, returns it.
+ */
+async function replicateFluxImage(prompt: string, outPath: string, opts: { width?: number; height?: number; model?: "schnell" | "dev" } = {}): Promise<void> {
+  const token = process.env.REPLICATE_API_TOKEN;
+  if (!token) throw new Error("REPLICATE_API_TOKEN is unset — replicate-flux backends require it");
+  const model = opts.model ?? "schnell";
+  const versionMap = {
+    schnell: "black-forest-labs/flux-schnell",
+    dev: "black-forest-labs/flux-dev",
+  };
+  const create = await fetch(`https://api.replicate.com/v1/models/${versionMap[model]}/predictions`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "wait" },
+    body: JSON.stringify({
+      input: {
+        prompt,
+        aspect_ratio: opts.width && opts.height && opts.width !== opts.height ? `${opts.width}:${opts.height}` : "1:1",
+        output_format: "png",
+        num_outputs: 1,
+      },
+    }),
+  });
+  if (!create.ok) throw new Error(`replicate ${create.status}: ${await create.text()}`);
+  const initial = await create.json() as { id: string; status: string; output: string[] | null; urls: { get: string } };
+  let prediction = initial;
+  // The Prefer:wait header gets us a synchronous response when fast, otherwise poll.
+  let tries = 0;
+  while (prediction.status !== "succeeded" && prediction.status !== "failed" && tries < 60) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const poll = await fetch(prediction.urls.get, { headers: { Authorization: `Bearer ${token}` } });
+    prediction = await poll.json() as typeof prediction;
+    tries += 1;
+  }
+  if (prediction.status !== "succeeded" || !prediction.output?.length) {
+    throw new Error(`replicate prediction ${prediction.status} (id=${prediction.id})`);
+  }
+  const imgRes = await fetch(prediction.output[0]);
+  const buf = Buffer.from(await imgRes.arrayBuffer());
+  await mkdir(dirname(outPath), { recursive: true });
+  await writeFile(outPath, buf);
+}
+
+export class ReplicateFluxConcept implements ConceptAdapter {
+  backend: ConceptBackend;
+  constructor(private readonly outDir: string, model: "schnell" | "dev" = "schnell") {
+    this.backend = model === "dev" ? "replicate-flux-dev" : "replicate-flux-schnell";
+  }
+  async generate(args: { prompt: string; width: number; height: number }) {
+    const p = join(this.outDir, "concept.png");
+    const model = this.backend === "replicate-flux-dev" ? "dev" : "schnell";
+    await replicateFluxImage(args.prompt, p, { width: args.width, height: args.height, model });
+    return { imagePath: p };
+  }
+}
+
+export class ReplicateFluxSprite implements SpriteAdapter {
+  backend: SpriteBackend = "replicate-flux-schnell";
+  constructor(private readonly outDir: string) {}
+  async generate(args: { prompt: string; frames: number; width: number; height: number }) {
+    const p = join(this.outDir, "sprites", `sheet_${args.frames}f.png`);
+    const prompt = `${args.prompt}, sprite sheet, ${args.frames} frames, transparent background, pixel art, top-down view, no shadow`;
+    await replicateFluxImage(prompt, p, { width: args.width * args.frames, height: args.height, model: "schnell" });
+    return { sheetPath: p };
+  }
+}
+
+export class ReplicateFluxTexture implements TextureAdapter {
+  backend: TextureBackend = "replicate-flux-schnell";
+  constructor(private readonly outDir: string) {}
+  async generate(args: { prompt: string; tiles: number; size: number }) {
+    const paths: string[] = [];
+    for (let i = 0; i < args.tiles; i++) {
+      const p = join(this.outDir, "textures", `tile_${i + 1}.png`);
+      const prompt = `${args.prompt}, seamless tile ${i + 1}, repeating pattern, top-down material, ${args.size}x${args.size}px`;
+      await replicateFluxImage(prompt, p, { width: args.size, height: args.size, model: "schnell" });
+      paths.push(p);
+    }
+    return { texturePaths: paths };
   }
 }
 
