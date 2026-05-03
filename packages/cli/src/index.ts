@@ -1052,8 +1052,82 @@ function usage(): never {
     "  praetor article12 --in <mission.json> --out <bundle-dir> [--operator <id>]",
     "  praetor ingest <url> [--mission <id>] [--backend fetch|crawl4ai|playwright-mcp|firecrawl] [--chunk <chars>]",
     "  praetor design serve <dir> [--port <n>] [--host <h>]",
+    "  praetor doctor",
+    "  praetor tools [--role <role>]",
   ].join("\n"));
   exit(1);
+}
+
+/** Print install-health report. Verifies env, registers tools, dry-runs hello. */
+async function cmdDoctor(): Promise<void> {
+  const lines: string[] = [];
+  const ok = (m: string) => lines.push(`  [ok] ${m}`);
+  const warn = (m: string) => lines.push(`  [warn] ${m}`);
+  const fail = (m: string) => lines.push(`  [fail] ${m}`);
+
+  lines.push("praetor doctor");
+  lines.push("");
+  lines.push("runtime:");
+  ok(`node ${process.version}`);
+  ok(`platform ${process.platform}/${process.arch}`);
+
+  lines.push("");
+  lines.push("env:");
+  const envs = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "MNEMOPAY_API_KEY", "REPLICATE_API_TOKEN", "FAL_KEY", "ELEVENLABS_API_KEY", "AZURE_SPEECH_KEY", "FIRECRAWL_API_KEY"];
+  for (const k of envs) (process.env[k] ? ok : warn)(`${k}${process.env[k] ? "" : " (unset — provider unavailable)"}`);
+
+  lines.push("");
+  lines.push("registry:");
+  try {
+    const dummyCharter: Charter = { name: "doctor", goal: "probe", agents: [], outputs: [], budget: { maxUsd: 0, approvalThresholdUsd: 0 } };
+    const reg = await buildEnhancedRegistry(dummyCharter, "doctor");
+    const all = reg.list();
+    const report = reg.productionReport();
+    ok(`${all.length} tools registered`);
+    ok(`origin: native=${report.byOrigin.native} adapter=${report.byOrigin.adapter} mock=${report.byOrigin.mock} experimental=${report.byOrigin.experimental}`);
+    ok(`production: ready=${report.byState.ready} needs-live-test=${report.byState["needs-live-test"]} needs-native-rewrite=${report.byState["needs-native-rewrite"]} stub=${report.byState.stub}`);
+    if (report.missingMetadata.length > 0) warn(`${report.missingMetadata.length} tools missing metadata: ${report.missingMetadata.slice(0, 5).join(", ")}${report.missingMetadata.length > 5 ? ", ..." : ""}`);
+  } catch (e) {
+    fail(`registry build error: ${(e as Error).message}`);
+  }
+
+  lines.push("");
+  lines.push("hello-world dry run:");
+  try {
+    const path = await import("node:path");
+    const fs = await import("node:fs");
+    const helloPath = path.join(process.cwd(), "charters", "hello.yaml");
+    if (!fs.existsSync(helloPath)) {
+      warn("charters/hello.yaml not found — skipping dry run");
+    } else {
+      ok(`charters/hello.yaml present`);
+      ok(`run with: node packages/cli/dist/index.js run charters/hello.yaml`);
+      ok(`output lands at: .praetor/sandbox/<mock-id>/hello.txt`);
+    }
+  } catch (e) {
+    fail(`hello dry-run probe failed: ${(e as Error).message}`);
+  }
+
+  console.log(lines.join("\n"));
+}
+
+/** List registered tools, optionally filtered by role. Surfaces the
+ * tags-vs-allowedRoles distinction that confused the hello.yaml author. */
+async function cmdTools(args: string[]): Promise<void> {
+  let role: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--role") role = args[++i];
+  }
+  const dummyCharter: Charter = { name: "tools", goal: "list", agents: [], outputs: [], budget: { maxUsd: 0, approvalThresholdUsd: 0 } };
+  const reg = await buildEnhancedRegistry(dummyCharter, "tools");
+  const all = role ? reg.list(role) : reg.list();
+  console.log(`${all.length} tools${role ? ` accessible to role '${role}'` : " registered"}:`);
+  for (const t of all) {
+    const roles = t.allowedRoles?.length ? `roles=[${t.allowedRoles.join(",")}]` : "roles=*";
+    const cost = t.costUsd ? `$${t.costUsd}` : "free";
+    const origin = t.metadata?.origin ?? "?";
+    console.log(`  ${t.name.padEnd(36)} ${origin.padEnd(12)} ${cost.padEnd(8)} ${roles}`);
+  }
 }
 
 // Re-exports so the API server, smoke tests, and embedders can build the same
@@ -1069,6 +1143,8 @@ async function main() {
     case "article12": return cmdArticle12(rest);
     case "ingest": return cmdIngest(rest);
     case "design": return cmdDesignServe(rest);
+    case "doctor": return cmdDoctor();
+    case "tools": return cmdTools(rest);
     default: usage();
   }
 }

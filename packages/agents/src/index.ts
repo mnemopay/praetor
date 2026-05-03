@@ -192,6 +192,14 @@ export class CoordinatorAgent implements AgentAdapter {
   ) {}
 
   async run(input: AgentRunInput): Promise<AgentRunResult> {
+    // Deterministic Executable Charters short-circuit. If the charter declares
+    // `steps:`, run them directly through NativePraetorEngine — no LLM
+    // dispatch, no role-filtered tool lists, no per-agent loop. The steps are
+    // the contract; the agents block is metadata only in this mode.
+    if (input.steps && input.steps.length > 0) {
+      const engine = new NativePraetorEngine(this.router, this.tools, this.toolContext, this.policy, this.route);
+      return engine.run(input);
+    }
     if (!input.agents || input.agents.length === 0) {
       // Fallback to native praetor if no agents specified
       const engine = new NativePraetorEngine(this.router, this.tools, this.toolContext, this.policy, this.route);

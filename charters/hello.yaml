@@ -1,10 +1,23 @@
+# Praetor — Hello, World charter.
+#
+# Uses the deterministic Executable Charters path (the `steps:` block).
+# No LLM provider needed, no API keys required, no network calls. Free.
+#
+#   node packages/cli/dist/index.js run charters/hello.yaml
+#
+# After: `cat hello.txt` should show the greeting.
 name: hello
-goal: print a hello world result through the praetor runtime
+goal: write Hello, World to ./hello.txt and exit
 budget:
-  maxUsd: 1
-  approvalThresholdUsd: 5
+  maxUsd: 0
+  approvalThresholdUsd: 0
 agents:
-  - role: developer
+  - role: coding
+steps:
+  - action: write_file
+    args:
+      path: ./hello.txt
+      content: "Hello, World — from Praetor.\n"
 outputs:
   - hello.txt
 compliance:

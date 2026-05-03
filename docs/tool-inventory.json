@@ -1,0 +1,83 @@
+{
+  "as-of": "2026-05-03",
+  "total": 3,
+  "byOrigin": {
+    "native": 0,
+    "adapter": 3,
+    "mock": 0,
+    "experimental": 0
+  },
+  "byState": {
+    "ready": 0,
+    "needs-live-test": 0,
+    "needs-native-rewrite": 3,
+    "stub": 0
+  },
+  "missingMetadata": [],
+  "tools": [
+    {
+      "name": "openweathermap.current",
+      "description": "Current weather by city (requires appid query param).",
+      "tags": [
+        "weather"
+      ],
+      "allowedRoles": [],
+      "costUsd": 0,
+      "metadata": {
+        "origin": "adapter",
+        "capability": "public_api_fetch",
+        "risk": [
+          "network"
+        ],
+        "approval": "never",
+        "sandbox": "remote-provider",
+        "production": "needs-native-rewrite",
+        "costEffective": true,
+        "note": "Starter public API adapter. Production Praetor tools should graduate to native capability-specific implementations."
+      }
+    },
+    {
+      "name": "coingecko.simple_price",
+      "description": "Simple crypto price lookup. /price?ids=bitcoin&vs_currencies=usd",
+      "tags": [
+        "finance",
+        "crypto"
+      ],
+      "allowedRoles": [],
+      "costUsd": 0,
+      "metadata": {
+        "origin": "adapter",
+        "capability": "public_api_fetch",
+        "risk": [
+          "network"
+        ],
+        "approval": "never",
+        "sandbox": "remote-provider",
+        "production": "needs-native-rewrite",
+        "costEffective": true,
+        "note": "Starter public API adapter. Production Praetor tools should graduate to native capability-specific implementations."
+      }
+    },
+    {
+      "name": "rest_countries.name",
+      "description": "Look up a country by name. /name/{name}",
+      "tags": [
+        "geo"
+      ],
+      "allowedRoles": [],
+      "costUsd": 0,
+      "metadata": {
+        "origin": "adapter",
+        "capability": "public_api_fetch",
+        "risk": [
+          "network"
+        ],
+        "approval": "never",
+        "sandbox": "remote-provider",
+        "production": "needs-native-rewrite",
+        "costEffective": true,
+        "note": "Starter public API adapter. Production Praetor tools should graduate to native capability-specific implementations."
+      }
+    }
+  ]
+}

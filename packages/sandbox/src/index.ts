@@ -41,25 +41,51 @@ export interface SandboxFactory {
 
 /* ─────────── MOCK (in-process, deterministic) ─────────── */
 
+/**
+ * MockSandbox — the default for `charter.sandbox.kind: "mock"` (or unset).
+ *
+ * Reads/writes go through to the REAL filesystem under
+ * `.praetor/sandbox/<missionId>/` so charter authors can actually see the
+ * artifacts their charter produces. `exec` stays mocked (returns canned
+ * stdout) — real shell execution requires explicit microvm/host sandbox.
+ *
+ * Path semantics: paths are joined under the sandbox root. Absolute paths
+ * have their drive/root stripped so a charter can't escape the sandbox.
+ */
+import { mkdir, writeFile as fsWriteFile, readFile as fsReadFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+
 export class MockSandbox implements Sandbox {
   readonly id: string;
-  private files = new Map<string, string>();
-  constructor(id = `mock-${Date.now().toString(36)}`) {
+  readonly root: string;
+  constructor(id = `mock-${Date.now().toString(36)}`, baseDir = ".praetor/sandbox") {
     this.id = id;
+    this.root = join(process.cwd(), baseDir, id);
   }
   async exec(cmd: string): Promise<ExecResult> {
     return { exitCode: 0, stdout: `mock> ${cmd}\n`, stderr: "", durationMs: 1 };
   }
-  async writeFile(path: string, content: string | Uint8Array): Promise<void> {
-    this.files.set(path, typeof content === "string" ? content : Buffer.from(content).toString("utf8"));
+  async writeFile(p: string, content: string | Uint8Array): Promise<void> {
+    const safe = join(this.root, this.confine(p));
+    await mkdir(dirname(safe), { recursive: true });
+    await fsWriteFile(safe, content as Buffer | string);
   }
-  async readFile(path: string): Promise<string> {
-    const f = this.files.get(path);
-    if (f === undefined) throw new Error(`mock-sandbox: file not found '${path}'`);
-    return f;
+  async readFile(p: string): Promise<string> {
+    const safe = join(this.root, this.confine(p));
+    try {
+      return await fsReadFile(safe, "utf-8");
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") throw new Error(`mock-sandbox: file not found '${p}'`);
+      throw err;
+    }
   }
   async close(): Promise<void> {
-    this.files.clear();
+    // Keep artifacts on disk so the user can inspect them post-mission.
+  }
+  /** Strip drive letter + leading separator so the path stays inside the sandbox root. */
+  private confine(p: string): string {
+    return p.replace(/^[A-Za-z]:/, "").replace(/^[\/\\]+/, "").replace(/\.\.[\/\\]/g, "");
   }
 }
 
