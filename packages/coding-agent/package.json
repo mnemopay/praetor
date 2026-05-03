@@ -16,8 +16,7 @@
     "@praetor/core": "*",
     "@praetor/router": "*",
     "@praetor/tools": "*",
-    "diff": "^9.0.0",
-    "simple-git": "^3.25.0"
+    "diff": "^9.0.0"
   },
   "devDependencies": {
     "@types/diff": "^7.0.2",

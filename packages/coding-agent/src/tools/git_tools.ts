@@ -1,8 +1,8 @@
 import { ToolRegistry } from "@praetor/tools";
-import { simpleGit, type SimpleGit } from "simple-git";
+import { PraetorGit } from "./praetor_git.js";
 
 /**
- * Git tools — wrappers over simple-git, scoped to the repo root.
+ * Git tools — Praetor-native via PraetorGit (no simple-git dependency).
  *
  * No tool here pushes or rewrites history. The agent must ask the user
  * before any operation that touches a remote or rewrites commits.
@@ -13,9 +13,10 @@ export interface GitToolsOptions {
 }
 
 export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void {
-  const git: SimpleGit = simpleGit({ baseDir: opts.repoRoot });
+  const git = new PraetorGit(opts.repoRoot);
   const tags = ["coding", "free", "git"] as const;
   const allowedRoles = ["coding"] as const;
+  const nativeNote = "PraetorGit native — spawns the git binary + parses porcelain v1.";
 
   reg.register<Record<string, unknown>, { not_added: string[]; modified: string[]; created: string[]; deleted: string[]; staged: string[] }>(
     {
@@ -23,18 +24,9 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
       description: "List uncommitted changes in the working tree.",
       schema: { type: "object", properties: {}, required: [] },
       tags, allowedRoles,
-      metadata: { origin: "adapter", capability: "git_status", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true, note: "Uses simple-git adapter; Praetor owns the schema and policy." },
+      metadata: { origin: "native", capability: "git_status", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true, note: nativeNote },
     },
-    async () => {
-      const s = await git.status();
-      return {
-        not_added: s.not_added,
-        modified: s.modified,
-        created: s.created,
-        deleted: s.deleted,
-        staged: s.staged,
-      };
-    },
+    async () => git.status(),
   );
 
   reg.register<{ path?: string }, { diff: string }>(
@@ -43,12 +35,9 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
       description: "Show the unstaged diff (optionally for a single path).",
       schema: { type: "object", properties: { path: { type: "string" } }, required: [] },
       tags, allowedRoles,
-      metadata: { origin: "adapter", capability: "git_diff", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true, note: "Uses simple-git adapter; production target is structured diff model." },
+      metadata: { origin: "native", capability: "git_diff", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true, note: nativeNote },
     },
-    async ({ path }) => {
-      const diff = path ? await git.diff([path]) : await git.diff();
-      return { diff };
-    },
+    async ({ path }) => ({ diff: await git.diff(path) }),
   );
 
   reg.register<{ message: string; paths?: string[] }, { commit: string; summary: string; rollbackBundle: string }>(
@@ -64,25 +53,23 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
         required: ["message"],
       },
       tags, allowedRoles,
-      metadata: { origin: "adapter", capability: "git_commit", risk: ["filesystem"], approval: "on-side-effect", sandbox: "repo", production: "ready", costEffective: true, note: "Commits automatically generate a rollback patch bundle before applying." },
+      metadata: { origin: "native", capability: "git_commit", risk: ["filesystem"], approval: "on-side-effect", sandbox: "repo", production: "ready", costEffective: true, note: "PraetorGit native; pre-commit rollback patch bundle written under .praetor/rollbacks/." },
     },
     async ({ message, paths }) => {
       // Generate rollback bundle before committing
-      const rollbackDiff = await git.diff(["HEAD"]);
+      const rollbackDiff = await git.diff();
       const rollbackBundle = `rollback_commit_${Date.now()}.patch`;
-      const fs = await import("fs/promises");
-      const path = await import("path");
+      const fs = await import("node:fs/promises");
+      const path = await import("node:path");
       const rollbackDir = path.resolve(opts.repoRoot, ".praetor", "rollbacks");
       await fs.mkdir(rollbackDir, { recursive: true });
       await fs.writeFile(path.resolve(rollbackDir, rollbackBundle), rollbackDiff, "utf8");
 
-      if (paths && paths.length > 0) {
-        await git.add(paths);
-      } else {
-        await git.add(["-A"]);
-      }
+      if (paths && paths.length > 0) await git.add(paths);
+      else await git.add(["-A"]);
+
       const r = await git.commit(message);
-      return { commit: r.commit, summary: `${r.summary?.changes ?? 0} changes / ${r.summary?.insertions ?? 0} insertions / ${r.summary?.deletions ?? 0} deletions`, rollbackBundle };
+      return { commit: r.commit, summary: r.summary, rollbackBundle };
     },
   );
 
@@ -92,12 +79,9 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
       description: "List branches and report the current one.",
       schema: { type: "object", properties: {}, required: [] },
       tags, allowedRoles,
-      metadata: { origin: "adapter", capability: "git_branch", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true },
+      metadata: { origin: "native", capability: "git_branch", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true, note: nativeNote },
     },
-    async () => {
-      const b = await git.branchLocal();
-      return { current: b.current, all: b.all };
-    },
+    async () => git.branchLocal(),
   );
 
   reg.register<{ limit?: number }, { commits: { hash: string; subject: string; author: string; date: string }[] }>(
@@ -106,19 +90,9 @@ export function registerGitTools(reg: ToolRegistry, opts: GitToolsOptions): void
       description: "Show recent commits.",
       schema: { type: "object", properties: { limit: { type: "integer" } }, required: [] },
       tags, allowedRoles,
-      metadata: { origin: "adapter", capability: "git_log", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true },
+      metadata: { origin: "native", capability: "git_log", risk: ["filesystem"], approval: "never", sandbox: "repo", production: "needs-live-test", costEffective: true, note: nativeNote },
     },
-    async ({ limit }) => {
-      const r = await git.log({ maxCount: typeof limit === "number" ? limit : 20 });
-      return {
-        commits: r.all.map((c) => ({
-          hash: c.hash,
-          subject: c.message,
-          author: c.author_name,
-          date: c.date,
-        })),
-      };
-    },
+    async ({ limit }) => ({ commits: await git.log(typeof limit === "number" ? limit : 20) }),
   );
 }
 
