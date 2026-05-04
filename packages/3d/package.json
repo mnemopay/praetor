@@ -1,0 +1,48 @@
+{
+  "name": "@praetor/3d",
+  "version": "0.1.0",
+  "description": "Praetor-native image-to-3D + text-to-3D runtime. Default backend is Microsoft TRELLIS (MIT, image -> GLB mesh + PBR textures) via Replicate's hosted endpoint. Mock + future self-hosted Diffusers + Hugging Face Inference adapters available.",
+  "keywords": [
+    "3d",
+    "trellis",
+    "image-to-3d",
+    "glb",
+    "praetor"
+  ],
+  "homepage": "https://praetor.mnemopay.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mnemopay/praetor.git",
+    "directory": "packages/3d"
+  },
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
+  "dependencies": {
+    "@praetor/core": "*"
+  }
+}

@@ -40,6 +40,7 @@
     { "path": "packages/computer-control" },
     { "path": "packages/voice" },
     { "path": "packages/browser" },
+    { "path": "packages/3d" },
     { "path": "packages/desktop" }
   ],
   "files": []
