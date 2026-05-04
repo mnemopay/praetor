@@ -129,7 +129,11 @@ export async function ensureDesktopEnvDefaults(repoRoot?: string): Promise<void>
 
 async function defaultCreateApp(): Promise<() => { listen: (port: number, host: string, cb: () => void) => Server }> {
   // Lazy-import @praetor/api so this module stays Electron-free + cheap to
-  // import in tests that just check pickPort / env defaulting.
-  const mod = (await import("@praetor/api")) as unknown as { createApp: () => { listen: (port: number, host: string, cb: () => void) => Server } };
+  // import in tests that just check pickPort / env defaulting. Indirect the
+  // specifier through a variable so tsc doesn't try to resolve the package
+  // at compile time (it isn't built yet during composite project graph
+  // bootstrap; resolved at runtime via the workspaces symlink).
+  const apiSpec = "@praetor/api";
+  const mod = (await import(apiSpec)) as unknown as { createApp: () => { listen: (port: number, host: string, cb: () => void) => Server } };
   return mod.createApp;
 }
