@@ -41,7 +41,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
+  "author": "J&B Enterprise LLC <jeremiah@getbizsuite.com>",
   "dependencies": {
     "@praetor/core": "*",
     "@praetor/tools": "*",

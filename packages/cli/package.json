@@ -52,7 +52,7 @@
     "@praetor/world-gen": "*",
     "yaml": "^2.5.0"
   },
-  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
+  "author": "J&B Enterprise LLC <jeremiah@getbizsuite.com>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",

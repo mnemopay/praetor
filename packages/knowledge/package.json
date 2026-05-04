@@ -10,7 +10,7 @@
     "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
-  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
+  "author": "J&B Enterprise LLC <jeremiah@getbizsuite.com>",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
