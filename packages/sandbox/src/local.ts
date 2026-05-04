@@ -58,19 +58,44 @@ export class LocalSandbox implements Sandbox {
       const isWin = process.platform === "win32";
       const shell = isWin ? "cmd.exe" : "sh";
       const args = isWin ? ["/d", "/s", "/c", cmd] : ["-c", cmd];
-      const child = spawn(shell, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+      // detached:true on POSIX puts the child in its own process group so
+      // we can SIGKILL the whole tree on timeout (otherwise grandchild
+      // processes keep stdio pipes open and `close` never fires).
+      const child = spawn(shell, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true, detached: !isWin });
       let stdout = "";
       let stderr = "";
       let timedOut = false;
+      let settled = false;
+      const settle = (result: ExecResult) => {
+        if (settled) return;
+        settled = true;
+        resolveFn(result);
+      };
       const timer = setTimeout(() => {
         timedOut = true;
-        try { child.kill("SIGKILL"); } catch { /* already exited */ }
+        try {
+          if (isWin) {
+            child.kill("SIGKILL");
+          } else if (child.pid) {
+            // Kill the whole process group (negative pid).
+            try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
+          }
+        } catch { /* already exited */ }
+        // Resolve from the timer rather than waiting for `close` —
+        // detached grandchildren can keep pipes open even after SIGKILL,
+        // so the close event isn't reliable across platforms.
+        settle({
+          exitCode: -1,
+          stdout: `${stdout}\n[praetor: timed out after ${timeoutMs}ms]`,
+          stderr,
+          durationMs: Date.now() - startedAt,
+        });
       }, timeoutMs);
       child.stdout?.on("data", (d) => { stdout += d.toString("utf8"); if (stdout.length > 5_000_000) stdout = stdout.slice(-5_000_000); });
       child.stderr?.on("data", (d) => { stderr += d.toString("utf8"); if (stderr.length > 5_000_000) stderr = stderr.slice(-5_000_000); });
       child.on("error", (err) => {
         clearTimeout(timer);
-        resolveFn({
+        settle({
           exitCode: -1,
           stdout,
           stderr: `${stderr}\n${err.message}`,
@@ -79,7 +104,7 @@ export class LocalSandbox implements Sandbox {
       });
       child.on("close", (code) => {
         clearTimeout(timer);
-        resolveFn({
+        settle({
           exitCode: typeof code === "number" ? code : -1,
           stdout: timedOut ? `${stdout}\n[praetor: timed out after ${timeoutMs}ms]` : stdout,
           stderr,
