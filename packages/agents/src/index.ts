@@ -90,7 +90,16 @@ export class NativePraetorEngine implements AgentAdapter {
       }
 
       const r = await this.router.chat(
-        { messages, maxTokens: 1024, tools: availableTools.length > 0 ? availableTools : undefined },
+        {
+          messages,
+          maxTokens: 1024,
+          tools: availableTools.length > 0 ? availableTools : undefined,
+          // Multi-turn agent loops repeatedly send the same system prompt
+          // and tool definitions. Provider-side prompt caching cuts that
+          // input cost to ~10% on every turn after the first — pairs
+          // directly with the FiscalGate budget cap.
+          cache: true,
+        },
         this.route,
         input.budgetUsd - spentUsd
       );

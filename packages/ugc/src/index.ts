@@ -37,6 +37,8 @@ export type MotionBackend =
   | "luma-ray2"
   | "luma-ray-flash"
   | "hedra-character-3"
+  | "sora-2"
+  | "sora-2-pro"
   | "kenburns";
 export type VoiceBackend =
   | "azure-neural"
@@ -140,6 +142,8 @@ export function priceOf(b: UgcBackends): number {
     : b.motion === "luma-ray2" ? 0.4
     : b.motion === "luma-ray-flash" ? 0.18
     : b.motion === "hedra-character-3" ? 0.20
+    : b.motion === "sora-2" ? 0.30
+    : b.motion === "sora-2-pro" ? 0.50
     : 0;
   const voice = b.voice === "elevenlabs" ? 0.05 : 0;
   return portrait + motion + voice;
@@ -540,6 +544,155 @@ async function runReplicate(
   const url = Array.isArray(out) ? out[0] : out;
   if (!url) throw new Error("Replicate: empty output");
   return url;
+}
+
+/* ---------- OpenAI Sora-2 motion adapter -------------------------------- */
+
+/**
+ * OpenAI Sora 2 / Sora 2 Pro — text-to-video + image-to-video.
+ *
+ * API surface (OpenAI Videos API, generally available 2026):
+ *   POST /v1/videos                  — body { model, prompt, size, seconds, input_reference?: file_id }
+ *                                      → { id, status: "queued"|"in_progress"|"completed"|"failed" }
+ *   GET  /v1/videos/{id}              → { id, status, ... }
+ *   GET  /v1/videos/{id}/content      → mp4 bytes (when status = completed)
+ *   POST /v1/files                    — multipart upload for image conditioning
+ *
+ * Praetor-native: no openai SDK dependency. Hits the REST surface
+ * directly via globalThis.fetch. Polls every 4s up to a 5-minute cap by
+ * default (Sora 2 typical render is 30–90 s).
+ *
+ * Token-cost estimate is in `priceOf()`. Real cost is reported back
+ * through the production renderer when the FiscalGate settles.
+ */
+export class SoraMotionAdapter implements MotionAdapter {
+  backend: MotionBackend;
+  constructor(
+    private readonly opts: {
+      apiKey: string;
+      /** "sora-2" (default, faster) or "sora-2-pro" (highest quality). */
+      model?: "sora-2" | "sora-2-pro";
+      outDir: string;
+      baseUrl?: string;
+      fetchImpl?: typeof fetch;
+      pollIntervalMs?: number;
+      maxPollMs?: number;
+    },
+  ) {
+    this.backend = (opts.model ?? "sora-2") === "sora-2-pro" ? "sora-2-pro" : "sora-2";
+  }
+
+  async generate(args: {
+    prompt: string;
+    portraitPath?: string;
+    portraitUrl?: string;
+    durationSeconds: number;
+    width: number;
+    height: number;
+  }): Promise<{ videoPath: string }> {
+    const f = this.opts.fetchImpl ?? globalThis.fetch;
+    const baseUrl = this.opts.baseUrl ?? "https://api.openai.com/v1";
+
+    // Sora 2 supports image conditioning via `input_reference: <file_id>`.
+    // Upload the portrait as a file first, then reference its id in the
+    // generation request. Skipped when no portrait is provided.
+    let inputReferenceId: string | undefined;
+    if (args.portraitPath) {
+      inputReferenceId = await this.uploadFile(args.portraitPath, f, baseUrl);
+    } else if (args.portraitUrl) {
+      // Sora's input_reference is a file_id, not a URL. Charters that
+      // already have a hosted URL can fetch + re-upload, or pre-upload
+      // and pass portraitPath. We don't auto-fetch remote URLs here to
+      // avoid surprising bandwidth use.
+    }
+
+    const size = sizeForSora(args.width, args.height);
+    const seconds = clampSeconds(args.durationSeconds);
+    const body: Record<string, unknown> = {
+      model: this.opts.model ?? "sora-2",
+      prompt: args.prompt,
+      size,
+      seconds,
+    };
+    if (inputReferenceId) body.input_reference = inputReferenceId;
+
+    const createRes = await f(`${baseUrl}/videos`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.opts.apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (!createRes.ok) {
+      throw new Error(`SoraMotionAdapter: create ${createRes.status} ${await createRes.text()}`);
+    }
+    const created = (await createRes.json()) as { id: string; status?: string };
+
+    const videoId = await this.poll(created.id, f, baseUrl);
+    const contentRes = await f(`${baseUrl}/videos/${videoId}/content`, {
+      headers: { authorization: `Bearer ${this.opts.apiKey}` },
+    });
+    if (!contentRes.ok) {
+      throw new Error(`SoraMotionAdapter: download ${contentRes.status} ${await contentRes.text()}`);
+    }
+    await mkdir(this.opts.outDir, { recursive: true });
+    const videoPath = join(this.opts.outDir, "motion.mp4");
+    await writeFile(videoPath, Buffer.from(await contentRes.arrayBuffer()));
+    return { videoPath };
+  }
+
+  private async uploadFile(filePath: string, f: typeof fetch, baseUrl: string): Promise<string> {
+    const buf = await readFile(filePath);
+    const ext = filePath.toLowerCase().endsWith(".png") ? "png" : filePath.toLowerCase().endsWith(".jpg") || filePath.toLowerCase().endsWith(".jpeg") ? "jpg" : "bin";
+    const mime = ext === "png" ? "image/png" : ext === "jpg" ? "image/jpeg" : "application/octet-stream";
+
+    const fd = new FormData();
+    fd.append("purpose", "vision");
+    fd.append("file", new Blob([buf as BlobPart], { type: mime }), `${basename(filePath)}`);
+
+    const res = await f(`${baseUrl}/files`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.opts.apiKey}` },
+      body: fd,
+    });
+    if (!res.ok) throw new Error(`SoraMotionAdapter: file upload ${res.status} ${await res.text()}`);
+    const j = (await res.json()) as { id: string };
+    return j.id;
+  }
+
+  private async poll(id: string, f: typeof fetch, baseUrl: string): Promise<string> {
+    const interval = this.opts.pollIntervalMs ?? 4_000;
+    const max = this.opts.maxPollMs ?? 5 * 60_000;
+    const t0 = Date.now();
+    while (Date.now() - t0 < max) {
+      const r = await f(`${baseUrl}/videos/${id}`, {
+        headers: { authorization: `Bearer ${this.opts.apiKey}` },
+      });
+      if (!r.ok) throw new Error(`SoraMotionAdapter: poll ${r.status} ${await r.text()}`);
+      const j = (await r.json()) as { id: string; status?: string; error?: { message?: string } };
+      if (j.status === "completed") return j.id;
+      if (j.status === "failed") throw new Error(`SoraMotionAdapter: failed — ${j.error?.message ?? "unknown"}`);
+      await new Promise((res) => setTimeout(res, interval));
+    }
+    throw new Error("SoraMotionAdapter: poll timeout");
+  }
+}
+
+/** Sora 2 supports `1280x720`, `720x1280`, and `1024x1024`. We snap the
+ * caller's requested dimensions to the closest supported value. */
+function sizeForSora(w: number, h: number): string {
+  if (w === h || Math.abs(w / h - 1) < 0.05) return "1024x1024";
+  if (h > w) return "720x1280";
+  return "1280x720";
+}
+
+function clampSeconds(s: number): number {
+  // Sora 2 currently caps at 20s. Default range is 4–8s for talking-head
+  // shapes; we floor at 4 (sub-4s gens are choppy on Sora today).
+  if (s < 4) return 4;
+  if (s > 20) return 20;
+  return Math.round(s);
 }
 
 /* ---------- Azure / edge TTS voice adapters ----------------------------- */

@@ -1,73 +1,180 @@
-import { mouse, keyboard, screen, Point, Button, Key } from "@nut-tree/nut-js";
-import Jimp from "jimp";
+/**
+ * PraetorComputerSession — owns the session lifecycle for "let an agent
+ * drive the host computer" scenarios. Handles screen capture, optional
+ * input control via an adapter, audit, and live-streaming of frames so
+ * an operator can see what the agent is doing.
+ *
+ * Shape:
+ *   const session = new PraetorComputerSession({
+ *     screen: new PraetorScreen(),         // native screenshot
+ *     input: nutInputAdapter,              // optional, opt-in
+ *     bus: activityBus,                     // optional — pumps stream frames
+ *     auditSink: { record: ... },          // optional
+ *   });
+ *   await session.screenshot();
+ *   await session.click(120, 200);
+ *   const stop = session.startStreaming({ missionId, intervalMs: 500 });
+ *   // ...later
+ *   stop();
+ *
+ * Per `feedback_praetor_native_tools.md`, the session itself is native
+ * Praetor code. Input control (click/type/scroll/hotkey) genuinely needs
+ * OS-level hooks, so it sits behind a `ComputerInputAdapter` interface
+ * that callers wire in. A `noopInputAdapter` is provided for environments
+ * where input mutation is intentionally disabled (read-only sessions).
+ */
+
+import type { ActivityBus, ActivityEvent } from "@praetor/core";
+import { PraetorScreen, type PraetorScreenOptions, type ScreenFrame } from "@praetor/vision";
+
+export interface AuditSinkLite {
+  record: (type: string, data: Record<string, unknown>) => void;
+}
+
+export interface ComputerInputAdapter {
+  /** Move cursor to (x, y) and press the named button. */
+  click(x: number, y: number, button: "left" | "right" | "middle"): Promise<void>;
+  /** Type a string at the current focus. */
+  type(text: string): Promise<void>;
+  /** Scroll the active surface by `amount` ticks in `direction`. */
+  scroll(amount: number, direction: "up" | "down"): Promise<void>;
+  /** Press a chord (e.g. ["control", "c"]). Adapter normalizes key names. */
+  hotkey(keys: string[]): Promise<void>;
+}
 
 export interface PraetorComputerSessionOptions {
-  auditSink?: { record: (type: string, data: Record<string, unknown>) => void };
+  /** Inject a configured PraetorScreen, or pass options to construct one. */
+  screen?: PraetorScreen | PraetorScreenOptions;
+  /** Optional input adapter. If omitted, click/type/scroll/hotkey throw. */
+  input?: ComputerInputAdapter;
+  /** Audit hook — called on every action with `(type, data)`. */
+  auditSink?: AuditSinkLite;
+  /** Activity bus for live frame streaming. */
+  bus?: ActivityBus;
+  /** Stable mission id for streaming activity events. Required if you stream without passing missionId per call. */
+  missionId?: string;
+}
+
+export interface StreamHandle {
+  /** Stops the streaming loop. Idempotent. */
+  stop: () => void;
+  /** Resolves after the underlying loop exits. */
+  done: Promise<void>;
 }
 
 export class PraetorComputerSession {
-  constructor(private readonly opts: PraetorComputerSessionOptions = {}) {
-    mouse.config.mouseSpeed = 1000;
+  private readonly screen: PraetorScreen;
+  private readonly input: ComputerInputAdapter | null;
+  private readonly auditSink?: AuditSinkLite;
+  private readonly bus?: ActivityBus;
+  private readonly missionId?: string;
+
+  constructor(opts: PraetorComputerSessionOptions = {}) {
+    this.screen = opts.screen instanceof PraetorScreen ? opts.screen : new PraetorScreen(opts.screen ?? {});
+    this.input = opts.input ?? null;
+    this.auditSink = opts.auditSink;
+    this.bus = opts.bus;
+    this.missionId = opts.missionId;
   }
 
-  async screenshot(): Promise<{ base64: string; width: number; height: number }> {
-    this.opts.auditSink?.record("computer.screenshot", {});
-    const img = await screen.grab();
-    // nut-js returns RGB/BGR buffer. We can wrap it in Jimp to get a PNG base64.
-    // However, to keep it simple and robust, we can just save and read.
-    const path = await screen.capture("praetor_screen.png");
-    // Actually, capture saves to disk. We can read it and return base64.
-    const fs = await import("fs/promises");
-    const buf = await fs.readFile(path);
-    const base64 = `data:image/png;base64,${buf.toString("base64")}`;
-    await fs.unlink(path); // clean up
-    return { base64, width: img.width, height: img.height };
+  /** Capture one screenshot. Returns base64 PNG and image dimensions. */
+  async screenshot(): Promise<{ base64: string; ts: string; backend: string }> {
+    this.auditSink?.record("computer.screenshot", {});
+    const frame = await this.screen.capture();
+    return {
+      base64: `data:image/png;base64,${frame.pngBuffer.toString("base64")}`,
+      ts: frame.ts,
+      backend: frame.backend,
+    };
   }
 
-  async redact(base64Png: string, regions: { x: number; y: number; w: number; h: number }[]): Promise<string> {
-    this.opts.auditSink?.record("computer.redact", { regions });
-    const raw = base64Png.replace(/^data:image\/png;base64,/, "");
-    const img = await Jimp.read(Buffer.from(raw, "base64"));
-    for (const r of regions) {
-      img.scan(r.x, r.y, r.w, r.h, function (x: number, y: number, idx: number) {
-        this.bitmap.data[idx + 0] = 0; // R
-        this.bitmap.data[idx + 1] = 0; // G
-        this.bitmap.data[idx + 2] = 0; // B
-        this.bitmap.data[idx + 3] = 255; // Alpha
-      });
-    }
-    return await img.getBase64Async(Jimp.MIME_PNG);
+  /** Returns the most recent frame as a raw Buffer, suitable for redaction or pixel ops. */
+  async captureFrame(): Promise<ScreenFrame> {
+    this.auditSink?.record("computer.screenshot", {});
+    return this.screen.capture();
   }
 
   async click(x: number, y: number, button: "left" | "right" | "middle" = "left"): Promise<void> {
-    this.opts.auditSink?.record("computer.click", { x, y, button });
-    await mouse.setPosition(new Point(x, y));
-    if (button === "left") await mouse.leftClick();
-    if (button === "right") await mouse.rightClick();
-    if (button === "middle") await mouse.click(Button.MIDDLE);
+    this.auditSink?.record("computer.click", { x, y, button });
+    this.requireInput("click");
+    await this.input!.click(x, y, button);
   }
 
   async type(text: string): Promise<void> {
-    this.opts.auditSink?.record("computer.type", { length: text.length });
-    await keyboard.type(text);
+    this.auditSink?.record("computer.type", { length: text.length });
+    this.requireInput("type");
+    await this.input!.type(text);
   }
 
   async scroll(amount: number, direction: "up" | "down" = "down"): Promise<void> {
-    this.opts.auditSink?.record("computer.scroll", { amount, direction });
-    if (direction === "down") await mouse.scrollDown(amount);
-    if (direction === "up") await mouse.scrollUp(amount);
+    this.auditSink?.record("computer.scroll", { amount, direction });
+    this.requireInput("scroll");
+    await this.input!.scroll(amount, direction);
   }
 
   async hotkey(keys: string[]): Promise<void> {
-    this.opts.auditSink?.record("computer.hotkey", { keys });
-    const mapped = keys.map(k => {
-      const keyStr = k.toUpperCase() as keyof typeof Key;
-      return Key[keyStr];
-    }).filter(k => k !== undefined);
-    
-    if (mapped.length > 0) {
-      await keyboard.pressKey(...mapped);
-      await keyboard.releaseKey(...mapped);
+    this.auditSink?.record("computer.hotkey", { keys });
+    this.requireInput("hotkey");
+    await this.input!.hotkey(keys);
+  }
+
+  /**
+   * Start a streaming loop that captures the screen every `intervalMs` and
+   * pushes each frame onto the activity bus as `artifact.partial` events.
+   * Returns a handle whose `stop()` ends the loop.
+   *
+   * Each frame's `chunk` is a base64-encoded PNG so the dashboard can
+   * render it without follow-up fetches.
+   */
+  startStreaming(args: { missionId?: string; intervalMs?: number; artifactId?: string }): StreamHandle {
+    if (!this.bus) throw new Error("PraetorComputerSession: cannot stream without `bus`");
+    const missionId = args.missionId ?? this.missionId;
+    if (!missionId) throw new Error("PraetorComputerSession: missionId required (constructor or startStreaming arg)");
+    const intervalMs = args.intervalMs ?? 1000;
+    const artifactId = args.artifactId ?? `screen-${Date.now().toString(36)}`;
+    const ac = new AbortController();
+    this.auditSink?.record("computer.stream.start", { missionId, intervalMs, artifactId });
+    const done = (async () => {
+      try {
+        for await (const frame of this.screen.streamFrames({ intervalMs, signal: ac.signal })) {
+          if (ac.signal.aborted) break;
+          const event: ActivityEvent = {
+            kind: "artifact.partial",
+            missionId,
+            artifactId,
+            format: "image",
+            chunk: `data:image/png;base64,${frame.pngBuffer.toString("base64")}`,
+            ts: frame.ts,
+          };
+          this.bus!.publish(event);
+        }
+      } finally {
+        this.auditSink?.record("computer.stream.stop", { missionId, artifactId });
+      }
+    })();
+    return {
+      stop: () => ac.abort(),
+      done,
+    };
+  }
+
+  private requireInput(action: string): void {
+    if (!this.input) {
+      throw new Error(
+        `PraetorComputerSession: '${action}' requires an input adapter. Pass { input: <ComputerInputAdapter> } to the constructor — see noopInputAdapter, or attach a platform-specific adapter (nut.js, RobotJS, custom).`,
+      );
     }
   }
 }
+
+/**
+ * Default no-op input adapter. Records intent into the audit sink (if any),
+ * does nothing else. Useful for read-only sessions or for tests that don't
+ * want to actually mutate the host.
+ */
+export const noopInputAdapter: ComputerInputAdapter = {
+  async click() { /* no-op */ },
+  async type() { /* no-op */ },
+  async scroll() { /* no-op */ },
+  async hotkey() { /* no-op */ },
+};

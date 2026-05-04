@@ -51,6 +51,8 @@ export function render(scene: PraetorScene, target: RendererTarget): RenderResul
       return renderVideoMp4(scene);
     case "three-scene":
       return renderThreeScene(scene);
+    case "claude-skill":
+      return renderClaudeSkill(scene);
     default:
       return {
         target,
@@ -1068,6 +1070,135 @@ requestAnimationFrame(tick);
     files: [{ path: `${scene.id}/index.html`, contents: html }],
     warnings,
   };
+}
+
+/* ---------- Claude-skill target ----------------------------------------- */
+/**
+ * Emit the scene as a Claude Code / Cursor skill bundle. Output is the
+ * exact directory shape Anthropic's `.claude/skills/<name>/` layout
+ * expects, plus a couple of Praetor extras (resolved tokens.json + a
+ * rendered preview.html) that downstream agents can read to understand
+ * the design system before they apply it.
+ *
+ * SKILL.md frontmatter is YAML — we hand-roll a tiny serializer so we
+ * don't pull a yaml lib for one file.
+ */
+function renderClaudeSkill(scene: PraetorScene): RenderResult {
+  const t = scene.tokens;
+  const skillName = sanitizeId(scene.id);
+  const description = scene.meta?.description?.trim() ?? `Praetor design system: ${skillName}.`;
+  const warnings: RenderWarning[] = [];
+  warnings.push(...auditScene(scene));
+
+  // Reuse the existing html emitter for preview.html so the skill ships a
+  // working render that any human or agent can open in a browser.
+  const htmlResult = renderHtml(scene);
+  const previewHtml = htmlResult.files[0]?.contents ?? "<!doctype html><body>preview unavailable</body>";
+  warnings.push(...htmlResult.warnings);
+
+  const tokensJson = JSON.stringify(t, null, 2);
+
+  const tokenSummary = [
+    `- Type stack: \`${t.typeStack.sans}\` (sans), \`${t.typeStack.mono}\` (mono)`,
+    `- Background: ${t.color.bg} · Text: ${t.color.text} · Accent: ${t.color.accent}`,
+    `- Section padding (desktop): ${t.layout.sectionPaddingDesktopPx}px · Max content: ${t.layout.maxContentWidthPx}px`,
+    `- Single ease curve: ${t.motion.ease}`,
+    `- Reduced motion: honored`,
+  ].join("\n");
+
+  const description160 = description.length <= 160 ? description : description.slice(0, 159) + "…";
+
+  // Hand-rolled YAML frontmatter. Quotes are escaped; multi-line strings
+  // would need '|' style but our description is single-line.
+  const skillMd = `---
+name: praetor-${skillName}
+description: ${yamlScalar(description160)}
+---
+
+# Praetor design — \`${skillName}\`
+
+Auto-generated from a PraetorScene by \`@praetor/design\`. Drop this folder
+into \`.claude/skills/\` (or any Cursor-compatible skill directory) and the
+agent will consume the bundled tokens + preview when designing UI in this
+project.
+
+## When to use
+
+- The user is building a new page / email / video / 3D scene that should
+  match this design system.
+- The user asks for "Praetor look" or references this scene id (\`${skillName}\`).
+- A downstream charter declares \`tokens: praetor-${skillName}\`.
+
+## Token cheat sheet
+
+${tokenSummary}
+
+The full token tree is in \`tokens.json\`. Treat it as read-only — never
+hand-edit, regenerate via \`@praetor/design\`'s \`render(scene, "claude-skill")\`.
+
+## Preview
+
+\`preview.html\` is a working render of this scene to the html target.
+Open it in a browser to see what you're inheriting, or screenshot it for
+context.
+
+## Usage in code
+
+\`\`\`ts
+import { tokens } from "@praetor/design";
+// or read tokens.json directly
+import t from "./tokens.json" with { type: "json" };
+// then drive every visual decision off the token tree.
+\`\`\`
+
+## Don't
+
+- Don't introduce inline hex codes; reference \`tokens.color.*\`.
+- Don't pull in third-party UI libraries (Tailwind, Bootstrap, etc.).
+  PraetorScene is renderer-agnostic and target-portable.
+- Don't ignore reduced-motion. Every animation under this skill must
+  respect \`prefers-reduced-motion\`.
+`;
+
+  const usageMd = `# Usage notes for \`praetor-${skillName}\`
+
+This skill packages a Praetor design system. Files:
+
+- \`SKILL.md\` — entry point Claude Code / Cursor reads first.
+- \`tokens.json\` — resolved token tree (colors, type, motion, layout).
+- \`preview.html\` — working render of the scene to html.
+
+The downstream agent's job is to apply the tokens, not to change them.
+If the design system needs to evolve, edit the source PraetorScene + the
+\`tokens.ts\` in \`@praetor/design\` and re-render this skill.
+
+## Scene metadata
+
+- id: \`${scene.id}\`
+- title: ${scene.meta?.title ?? "(unset)"}
+- targets supported: ${scene.targets.join(", ")}
+`;
+
+  return {
+    target: "claude-skill",
+    files: [
+      { path: `.claude/skills/praetor-${skillName}/SKILL.md`, contents: skillMd },
+      { path: `.claude/skills/praetor-${skillName}/tokens.json`, contents: tokensJson },
+      { path: `.claude/skills/praetor-${skillName}/preview.html`, contents: previewHtml },
+      { path: `.claude/skills/praetor-${skillName}/usage.md`, contents: usageMd },
+    ],
+    warnings,
+  };
+}
+
+/**
+ * Quote a string for safe insertion as a YAML scalar value. Anything with
+ * `:` `#` `'` `"` `\n` or starting with a special char gets double-quoted
+ * with backslash escapes. Plain ASCII passes through unquoted.
+ */
+function yamlScalar(s: string): string {
+  if (/^[A-Za-z][\w .,'-]*$/.test(s)) return s;
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
 }
 
 /* ---------- Shared helpers ---------------------------------------------- */

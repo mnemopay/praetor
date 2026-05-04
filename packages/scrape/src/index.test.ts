@@ -15,6 +15,8 @@ import {
   PlaywrightMcpAdapter,
   defaultScraper,
   parseXStatusUrl,
+  isInternalUrl,
+  nativeHttpFetch,
 } from "./index.js";
 
 describe("Praetor scrape pack", () => {
@@ -216,6 +218,99 @@ describe("Praetor scrape pack", () => {
     expect(r.status).toBe(999);
     expect(r.crawl?.allowed).toBe(false);
     expect(adapterCalled).toBe(false);
+  });
+
+  it("isInternalUrl flags loopback / link-local / RFC1918 / cloud metadata targets", () => {
+    expect(isInternalUrl("http://127.0.0.1/")).toBe(true);
+    expect(isInternalUrl("http://localhost/")).toBe(true);
+    expect(isInternalUrl("http://10.0.0.5:8080/")).toBe(true);
+    expect(isInternalUrl("http://192.168.1.1/")).toBe(true);
+    expect(isInternalUrl("http://172.16.0.10/")).toBe(true);
+    expect(isInternalUrl("http://172.20.5.5/")).toBe(true);
+    expect(isInternalUrl("http://172.31.255.255/")).toBe(true);
+    expect(isInternalUrl("http://169.254.169.254/latest/meta-data/")).toBe(true);
+    expect(isInternalUrl("http://100.64.5.5/")).toBe(true);
+    expect(isInternalUrl("http://0.0.0.0/")).toBe(true);
+    expect(isInternalUrl("http://[::1]/")).toBe(true);
+    expect(isInternalUrl("http://[fe80::1]/")).toBe(true);
+    expect(isInternalUrl("http://[fc00::1]/")).toBe(true);
+    // Public addresses pass.
+    expect(isInternalUrl("https://example.com/")).toBe(false);
+    expect(isInternalUrl("http://8.8.8.8/")).toBe(false);
+    expect(isInternalUrl("http://172.32.0.1/")).toBe(false); // outside 172.16/12
+    expect(isInternalUrl("http://172.15.0.1/")).toBe(false); // outside 172.16/12 lower bound
+  });
+
+  it("nativeHttpFetch refuses internal targets by default (SSRF protection)", async () => {
+    await expect(nativeHttpFetch({ url: "http://169.254.169.254/latest/meta-data/" }))
+      .rejects.toThrow(/refusing internal target/);
+    await expect(nativeHttpFetch({ url: "http://127.0.0.1:8080/admin" }))
+      .rejects.toThrow(/refusing internal target/);
+  });
+
+  it("nativeHttpFetch refuses redirects that chase to internal targets", async () => {
+    let callCount = 0;
+    const captured: string[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL) => {
+      callCount += 1;
+      captured.push(String(url));
+      if (callCount === 1) {
+        return new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data/" } });
+      }
+      return new Response("should never reach", { status: 200 });
+    }) as unknown as typeof fetch;
+    const original = globalThis.fetch;
+    globalThis.fetch = fetchImpl;
+    try {
+      await expect(nativeHttpFetch({ url: "https://attacker.example.com/redirect" }))
+        .rejects.toThrow(/refusing internal target/);
+      expect(captured).toEqual(["https://attacker.example.com/redirect"]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("nativeHttpFetch follows redirects to other public hosts but strips Cookie/Authorization on cross-origin", async () => {
+    const captured: { url: string; cookie?: string; authorization?: string }[] = [];
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      captured.push({ url: String(url), cookie: headers.cookie, authorization: headers.authorization });
+      if (captured.length === 1) {
+        return new Response(null, { status: 302, headers: { location: "https://other.example.com/landed" } });
+      }
+      return new Response("ok", { status: 200, headers: { "content-type": "text/plain" } });
+    }) as unknown as typeof fetch;
+    const original = globalThis.fetch;
+    globalThis.fetch = fetchImpl;
+    try {
+      const r = await nativeHttpFetch({
+        url: "https://first.example.com/start",
+        headers: { cookie: "secret=1", authorization: "Bearer x", "x-csrf-token": "y", "user-agent": "test" },
+      });
+      expect(r.statusCode).toBe(200);
+      expect(r.body).toBe("ok");
+      // First hop carried the credentials; second hop (cross-origin) stripped them.
+      expect(captured[0].cookie).toBe("secret=1");
+      expect(captured[1].cookie).toBeUndefined();
+      expect(captured[1].authorization).toBeUndefined();
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("nativeHttpFetch enforces a redirect-chain limit", async () => {
+    const fetchImpl = vi.fn(async (url: string | URL) => {
+      // Endless redirect chain.
+      return new Response(null, { status: 302, headers: { location: `https://chain.example.com/${Math.random()}` } });
+    }) as unknown as typeof fetch;
+    const original = globalThis.fetch;
+    globalThis.fetch = fetchImpl;
+    try {
+      await expect(nativeHttpFetch({ url: "https://chain.example.com/start", maxRedirects: 3 }))
+        .rejects.toThrow(/redirect limit \(3\) exceeded/);
+    } finally {
+      globalThis.fetch = original;
+    }
   });
 
   it("scrape() applies per-host crawl delay without sleeping in tests", async () => {

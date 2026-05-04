@@ -1,0 +1,393 @@
+[
+  {
+    "ts": "2026-05-04T07:43:05.583Z",
+    "type": "mission.start",
+    "data": {
+      "charter": "praetor-basic-demo",
+      "budget": {
+        "maxUsd": 0,
+        "approvalThresholdUsd": 0
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:05.586Z",
+    "type": "budget.reserved",
+    "data": {
+      "holdId": "mock_1777880585586_f80is0",
+      "maxUsd": 0
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:05.590Z",
+    "type": "tool.call.start",
+    "data": {
+      "eventId": "5c208d79-2fa5-4245-a2ea-ddb6605e63c5",
+      "name": "scrape_url",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "web_scrape",
+        "risk": [
+          "network"
+        ],
+        "approval": "never",
+        "sandbox": "remote-provider",
+        "production": "needs-live-test",
+        "costEffective": true,
+        "note": "Praetor native fetch/extract path is default; hard-page adapters remain optional."
+      },
+      "input": {
+        "url": "https://example.com/"
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:05.945Z",
+    "type": "tool.call.ok",
+    "data": {
+      "eventId": "5c208d79-2fa5-4245-a2ea-ddb6605e63c5",
+      "name": "scrape_url",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "web_scrape",
+        "risk": [
+          "network"
+        ],
+        "approval": "never",
+        "sandbox": "remote-provider",
+        "production": "needs-live-test",
+        "costEffective": true,
+        "note": "Praetor native fetch/extract path is default; hard-page adapters remain optional."
+      },
+      "result": {
+        "success": true,
+        "status": 200,
+        "text": "Example Domain\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\nLearn more"
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:05.945Z",
+    "type": "tool.call.start",
+    "data": {
+      "eventId": "3235872d-99a4-46cf-b4e3-bf7c0ceb03b9",
+      "name": "profile_geo_competitor",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "geo_competitor_profile",
+        "risk": [
+          "network"
+        ],
+        "approval": "never",
+        "sandbox": "remote-provider",
+        "production": "needs-live-test",
+        "costEffective": true
+      },
+      "input": {
+        "competitorUrl": "https://example.com/"
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.139Z",
+    "type": "tool.call.ok",
+    "data": {
+      "eventId": "3235872d-99a4-46cf-b4e3-bf7c0ceb03b9",
+      "name": "profile_geo_competitor",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "geo_competitor_profile",
+        "risk": [
+          "network"
+        ],
+        "approval": "never",
+        "sandbox": "remote-provider",
+        "production": "needs-live-test",
+        "costEffective": true
+      },
+      "result": {
+        "success": true,
+        "profile": {
+          "aiDescription": "",
+          "jsonLd": [],
+          "headings": {
+            "h1": 1,
+            "h2": 0,
+            "h3": 0
+          },
+          "title": "Example Domain"
+        }
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.141Z",
+    "type": "tool.call.start",
+    "data": {
+      "eventId": "848aa0e8-0b4b-43db-a7c0-d57c3d29185b",
+      "name": "geo_outreach_sequence",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "geo_outreach_draft",
+        "risk": [
+          "reputation"
+        ],
+        "approval": "never",
+        "sandbox": "none",
+        "production": "needs-live-test",
+        "costEffective": true
+      },
+      "input": {
+        "targetSite": "https://example.com/",
+        "authorName": "[redacted]",
+        "niche": "example domain reference"
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.141Z",
+    "type": "tool.call.ok",
+    "data": {
+      "eventId": "848aa0e8-0b4b-43db-a7c0-d57c3d29185b",
+      "name": "geo_outreach_sequence",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "geo_outreach_draft",
+        "risk": [
+          "reputation"
+        ],
+        "approval": "never",
+        "sandbox": "none",
+        "production": "needs-live-test",
+        "costEffective": true
+      },
+      "result": {
+        "success": true,
+        "sequence": [
+          {
+            "step": 1,
+            "subject": "Quick question about https://example.com/",
+            "body": "Hi Example Author,\n\nI was just reading your recent post about example domain reference on https://example.com/ and loved your insights.\n\nI recently published a comprehensive piece on a similar topic. I thought it might be a valuable addition for your readers. Let me know if you're open to checking it out!\n\nBest,"
+          },
+          {
+            "step": 2,
+            "subject": "Re: Quick question about https://example.com/",
+            "body": "Hi Example Author,\n\nJust bubbling this up in case you missed it. No pressure at all if it's not a fit for https://example.com/.\n\nCheers,"
+          },
+          {
+            "step": 3,
+            "subject": "Final follow up - https://example.com/",
+            "body": "Hi Example Author,\n\nI won't bug you again, but wanted to send one last note. Keep up the great work in the example domain reference space!\n\nBest,"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.141Z",
+    "type": "tool.call.start",
+    "data": {
+      "eventId": "a8284a18-5ac9-4353-b27c-4d6a2a2f3f53",
+      "name": "generate_seo_site",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "seo_site_generate",
+        "risk": [
+          "filesystem"
+        ],
+        "approval": "on-side-effect",
+        "sandbox": "repo",
+        "production": "needs-live-test",
+        "costEffective": true
+      },
+      "input": {
+        "origin": "https://praetor-demo.local",
+        "pages": [
+          {
+            "slug": "index",
+            "title": "Praetor — basic demo",
+            "description": "End-to-end Praetor charter demonstrating scrape, profile, outreach, SEO emit, and audit.",
+            "aiDescription": "Basic Praetor mission demo. Native runtime, no LLM, no peer deps.",
+            "bodyMarkdown": "# Praetor basic demo\n\nThis page was generated by a Praetor charter.\nThe charter scraped example.com, profiled its GEO surface, drafted outreach, and emitted this site.\nNo LLM, no peer deps. Pure native runtime."
+          }
+        ]
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.162Z",
+    "type": "tool.call.ok",
+    "data": {
+      "eventId": "a8284a18-5ac9-4353-b27c-4d6a2a2f3f53",
+      "name": "generate_seo_site",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "seo_site_generate",
+        "risk": [
+          "filesystem"
+        ],
+        "approval": "on-side-effect",
+        "sandbox": "repo",
+        "production": "needs-live-test",
+        "costEffective": true
+      },
+      "result": {
+        "success": true,
+        "message": "SEO site generated at C:\\Users\\bizsu\\Projects\\praetor\\praetor-out\\seo"
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.163Z",
+    "type": "tool.call.start",
+    "data": {
+      "eventId": "bc74e135-18f7-4f67-8260-46ff41930da1",
+      "name": "ingest_knowledge",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "knowledge_ingest",
+        "risk": [
+          "filesystem"
+        ],
+        "approval": "never",
+        "sandbox": "none",
+        "production": "needs-live-test",
+        "costEffective": true
+      },
+      "input": {
+        "text": "Praetor basic demo: scraped example.com, generated outreach sequence, emitted SEO bundle. Charter completed cleanly.",
+        "source": "charters/demo-basic.yaml"
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.165Z",
+    "type": "tool.call.ok",
+    "data": {
+      "eventId": "bc74e135-18f7-4f67-8260-46ff41930da1",
+      "name": "ingest_knowledge",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "knowledge_ingest",
+        "risk": [
+          "filesystem"
+        ],
+        "approval": "never",
+        "sandbox": "none",
+        "production": "needs-live-test",
+        "costEffective": true
+      },
+      "result": {
+        "ingested": 1
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.165Z",
+    "type": "tool.call.start",
+    "data": {
+      "eventId": "f78f1390-3907-476b-91d7-d0ca166e3743",
+      "name": "upsert_contact",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "business_contact_upsert",
+        "risk": [
+          "identity",
+          "filesystem"
+        ],
+        "approval": "on-side-effect",
+        "sandbox": "none",
+        "production": "needs-live-test",
+        "costEffective": true
+      },
+      "input": {
+        "email": "demo@praetor.local",
+        "name": "Praetor Demo",
+        "company": "Praetor",
+        "source": "basic-demo-charter",
+        "tags": [
+          "demo",
+          "end-to-end"
+        ]
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.166Z",
+    "type": "contact.upsert",
+    "data": {
+      "email": "demo@praetor.local",
+      "tags": [
+        "demo",
+        "end-to-end"
+      ]
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.166Z",
+    "type": "tool.call.ok",
+    "data": {
+      "eventId": "f78f1390-3907-476b-91d7-d0ca166e3743",
+      "name": "upsert_contact",
+      "estUsd": 0,
+      "role": "developer",
+      "metadata": {
+        "origin": "native",
+        "capability": "business_contact_upsert",
+        "risk": [
+          "identity",
+          "filesystem"
+        ],
+        "approval": "on-side-effect",
+        "sandbox": "none",
+        "production": "needs-live-test",
+        "costEffective": true
+      },
+      "result": {
+        "success": true,
+        "contact": {
+          "email": "demo@praetor.local",
+          "name": "Praetor Demo",
+          "company": "Praetor",
+          "source": "basic-demo-charter",
+          "tags": [
+            "demo",
+            "end-to-end"
+          ],
+          "firstSeenAt": "2026-05-04T07:43:06.165Z",
+          "lastTouchedAt": "2026-05-04T07:43:06.165Z"
+        }
+      }
+    }
+  },
+  {
+    "ts": "2026-05-04T07:43:06.166Z",
+    "type": "mission.complete",
+    "data": {
+      "outputs": 9,
+      "spentUsd": 0
+    }
+  }
+]

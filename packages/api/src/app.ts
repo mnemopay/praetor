@@ -1,4 +1,3 @@
-import express from "express";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { authMiddleware, type AuthedRequest } from "./auth.js";
@@ -13,15 +12,16 @@ import {
   listMissions,
 } from "./db.js";
 import { env } from "./env.js";
+import { praetorHttp, jsonBodyParser, type Handler, type PraetorApp } from "./http.js";
 import { getPluginRegistry, validatePluginName } from "./marketplace.js";
-import { newMissionId, startMissionRun } from "./runner.js";
+import { newMissionId, recordMissionChatMessage, startMissionRun } from "./runner.js";
 import { mountActivityPersistence } from "./activity.js";
 import { createActivityRouter } from "./routes/activity.js";
 import { getToolCatalog } from "./tools.js";
 
-export function createApp() {
-  const app = express();
-  app.use(express.json({ limit: "1mb" }));
+export function createApp(): PraetorApp {
+  const app = praetorHttp();
+  app.use(jsonBodyParser({ limit: "1mb" }));
 
   // CORS for the Vite dashboard. Allow any localhost origin in dev; tighten via env in prod.
   const allowedOrigins = (env.allowedOrigins ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -47,8 +47,8 @@ export function createApp() {
     res.json({ ok: true, service: "praetor-api", time: new Date().toISOString() });
   });
 
-  app.post("/api/v1/auth/session", authMiddleware, (req: AuthedRequest, res) => {
-    res.json({ ok: true, user: req.user });
+  app.post("/api/v1/auth/session", authMiddleware, (req, res) => {
+    res.json({ ok: true, user: (req as AuthedRequest).user });
   });
 
   // SSE activity routes — must mount BEFORE the global auth middleware so
@@ -56,8 +56,9 @@ export function createApp() {
   mountActivityPersistence(getMissionOwner);
   app.use("/api/v1", createActivityRouter());
 
-  app.get("/api/v1/artifacts", artifactQueryTokenAuth, authMiddleware, (req: AuthedRequest, res) => {
-    const rawPath = typeof req.query.path === "string" ? req.query.path : "";
+  app.get("/api/v1/artifacts", artifactQueryTokenAuth, authMiddleware, (req, res) => {
+    const rawPathQ = (req as AuthedRequest).query.path;
+    const rawPath = typeof rawPathQ === "string" ? rawPathQ : "";
     const target = resolve(rawPath);
     const allowedRoots = [
       resolve(env.repoRoot, "praetor-out"),
@@ -81,29 +82,31 @@ export function createApp() {
 
   app.use("/api/v1", authMiddleware);
 
-  app.get("/api/v1/missions", async (req: AuthedRequest, res) => {
-    const data = await listMissions(req.user!.id);
+  app.get("/api/v1/missions", async (req, res) => {
+    const data = await listMissions((req as AuthedRequest).user!.id);
     res.json({ ok: true, missions: data });
   });
 
-  app.post("/api/v1/missions", async (req: AuthedRequest, res) => {
-    const goal = String(req.body?.goal ?? "").trim();
+  app.post("/api/v1/missions", async (req, res) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const goal = String(body.goal ?? "").trim();
     if (!goal) {
       res.status(400).json({ ok: false, error: "goal is required" });
       return;
     }
     const missionId = newMissionId();
-    const installed = await listInstalledPlugins(req.user!.id);
+    const userId = (req as AuthedRequest).user!.id;
+    const installed = await listInstalledPlugins(userId);
     const charter = buildCharter({
       goal,
-      budgetUsd: Number(req.body?.budgetUsd ?? env.defaultBudgetUsd),
-      outputs: Array.isArray(req.body?.outputs) ? req.body.outputs : undefined,
+      budgetUsd: Number(body.budgetUsd ?? env.defaultBudgetUsd),
+      outputs: Array.isArray(body.outputs) ? (body.outputs as string[]) : undefined,
       plugins: installed,
-      agent: typeof req.body?.agent === "string" ? req.body.agent : undefined,
+      agent: typeof body.agent === "string" ? (body.agent as Parameters<typeof buildCharter>[0]["agent"]) : undefined,
     });
     await createMissionRow({
       id: missionId,
-      userId: req.user!.id,
+      userId,
       goal,
       budget: charter.budget.maxUsd,
       charterJson: charter as unknown as Record<string, unknown>,
@@ -112,9 +115,10 @@ export function createApp() {
     res.status(202).json({ ok: true, missionId });
   });
 
-  app.get("/api/v1/missions/:id", async (req: AuthedRequest, res) => {
-    const missionId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const mission = await getMissionForUser(missionId, req.user!.id);
+  app.get("/api/v1/missions/:id", async (req, res) => {
+    const missionId = String(req.params.id ?? "");
+    const userId = (req as AuthedRequest).user!.id;
+    const mission = await getMissionForUser(missionId, userId);
     if (!mission) {
       res.status(404).json({ ok: false, error: "Mission not found" });
       return;
@@ -123,27 +127,57 @@ export function createApp() {
     res.json({ ok: true, mission, logs });
   });
 
-  app.get("/api/v1/marketplace/plugins", async (req: AuthedRequest, res) => {
-    const installed = await listInstalledPlugins(req.user!.id);
+  // "Talk back" surface for the dashboard chat. Appends a message to the
+  // per-mission inbox file AND publishes a chat.user / chat.assistant
+  // activity event so the SSE stream re-renders the conversation in real
+  // time. Agent-loop consumption of the inbox is a separate follow-up.
+  app.post("/api/v1/missions/:id/messages", async (req, res) => {
+    const missionId = String(req.params.id ?? "");
+    const userId = (req as AuthedRequest).user!.id;
+    const mission = await getMissionForUser(missionId, userId);
+    if (!mission) {
+      res.status(404).json({ ok: false, error: "Mission not found" });
+      return;
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const text = String(body.text ?? "").trim();
+    const role = body.role === "assistant" ? "assistant" : "user";
+    if (!text) {
+      res.status(400).json({ ok: false, error: "text is required" });
+      return;
+    }
+    if (text.length > 8_000) {
+      res.status(413).json({ ok: false, error: "text exceeds 8000 character cap" });
+      return;
+    }
+    const { event } = await recordMissionChatMessage({ missionId, text, role });
+    res.status(202).json({ ok: true, event });
+  });
+
+  app.get("/api/v1/marketplace/plugins", async (req, res) => {
+    const userId = (req as AuthedRequest).user!.id;
+    const installed = await listInstalledPlugins(userId);
     res.json({ ok: true, plugins: getPluginRegistry(), installed });
   });
 
-  app.get("/api/v1/tools", async (_req: AuthedRequest, res) => {
+  app.get("/api/v1/tools", async (_req, res) => {
     res.json(await getToolCatalog());
   });
 
-  app.post("/api/v1/marketplace/install", async (req: AuthedRequest, res) => {
-    const pluginName = String(req.body?.pluginName ?? "").trim();
+  app.post("/api/v1/marketplace/install", async (req, res) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const pluginName = String(body.pluginName ?? "").trim();
     if (!validatePluginName(pluginName)) {
       res.status(400).json({ ok: false, error: "Invalid plugin name format" });
       return;
     }
-    await installPlugin(req.user!.id, pluginName);
-    const installed = await listInstalledPlugins(req.user!.id);
+    const userId = (req as AuthedRequest).user!.id;
+    await installPlugin(userId, pluginName);
+    const installed = await listInstalledPlugins(userId);
     res.json({ ok: true, installed });
   });
 
-  app.get("/api/v1/billing", (_req: AuthedRequest, res) => {
+  app.get("/api/v1/billing", (_req, res) => {
     res.json({
       ok: true,
       thresholdUsd: env.defaultBudgetUsd,
@@ -154,7 +188,7 @@ export function createApp() {
   // ─── World-gen: list and serve scenes published via @praetor/world-gen ──────
   const worldGenRoot = resolve(env.worldGenOutDir ?? join(env.repoRoot, "praetor-out", "scenes"));
 
-  app.get("/api/v1/world-gen/scenes", (_req: AuthedRequest, res) => {
+  app.get("/api/v1/world-gen/scenes", (_req, res) => {
     if (!existsSync(worldGenRoot)) {
       res.json({ ok: true, scenes: [], root: worldGenRoot });
       return;
@@ -183,7 +217,7 @@ export function createApp() {
     res.json({ ok: true, scenes, root: worldGenRoot });
   });
 
-  app.get("/api/v1/world-gen/scenes/:id/:file", (req: AuthedRequest, res) => {
+  app.get("/api/v1/world-gen/scenes/:id/:file", (req, res) => {
     const id = String(req.params.id ?? "").replace(/[^a-z0-9-_]/gi, "");
     const file = String(req.params.file ?? "").replace(/[^a-z0-9-_.]/gi, "");
     if (!id || !file) {
@@ -203,9 +237,11 @@ export function createApp() {
   return app;
 }
 
-function artifactQueryTokenAuth(req: express.Request, _res: express.Response, next: () => void): void {
-  if (!req.headers.authorization && typeof req.query.token === "string" && req.query.token) {
-    (req.headers as Record<string, string>).authorization = `Bearer ${req.query.token}`;
+const artifactQueryTokenAuth: Handler = (req, _res, next) => {
+  const tokenQ = req.query.token;
+  const tokenStr = Array.isArray(tokenQ) ? tokenQ[0] : tokenQ;
+  if (!req.headers.authorization && tokenStr) {
+    req.headers.authorization = `Bearer ${tokenStr}`;
   }
   next();
-}
+};

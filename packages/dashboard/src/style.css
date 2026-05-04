@@ -971,6 +971,21 @@ code { font-family: monospace; background: var(--code-inline-bg); padding: 0.15e
   border-radius: 6px;
   font-size: 0.78rem;
 }
+.activity-chat {
+  border-left: 3px solid transparent;
+}
+.activity-chat-user {
+  border-left-color: #38bdf8;
+}
+.activity-chat-assistant {
+  border-left-color: #a78bfa;
+}
+.activity-chat-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.86rem;
+  opacity: 0.95;
+}
 
 @media (max-width: 900px) {
   .chat-split { grid-template-columns: 1fr; }

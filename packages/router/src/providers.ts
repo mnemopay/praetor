@@ -26,10 +26,22 @@ function lookupCard(catalogue: ModelCard[] | undefined, modelId: string): ModelC
   return (catalogue ?? []).find((m) => m.id === modelId);
 }
 
-function costFor(card: ModelCard | undefined, inputTokens: number, outputTokens: number): number {
+function costFor(
+  card: ModelCard | undefined,
+  inputTokens: number,
+  outputTokens: number,
+  cachedInputTokens = 0,
+  cacheWriteTokens = 0,
+): number {
   if (!card) return 0;
+  // Cached reads are billed at 10% of input price; cache writes (Anthropic
+  // ephemeral) at 125%. Net: a stable system prompt cached across N calls
+  // pays 1× write + (N-1) × 0.1× = ≈10% of the uncached run cost at N≥10.
+  const freshInput = Math.max(0, inputTokens - cachedInputTokens - cacheWriteTokens);
   return (
-    (inputTokens / 1000) * card.inputUsdPer1K +
+    (freshInput / 1000) * card.inputUsdPer1K +
+    (cachedInputTokens / 1000) * card.inputUsdPer1K * 0.10 +
+    (cacheWriteTokens / 1000) * card.inputUsdPer1K * 1.25 +
     (outputTokens / 1000) * card.outputUsdPer1K
   );
 }
@@ -75,13 +87,14 @@ export class OpenRouterProvider implements Provider {
     }
     const data = (await res.json()) as {
       choices?: { message?: { content?: string; tool_calls?: any[] } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
+      usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } };
       model?: string;
     };
     const text = data.choices?.[0]?.message?.content ?? "";
     const toolCalls = data.choices?.[0]?.message?.tool_calls;
     const inputTokens = data.usage?.prompt_tokens ?? 0;
     const outputTokens = data.usage?.completion_tokens ?? 0;
+    const cachedInputTokens = data.usage?.prompt_tokens_details?.cached_tokens ?? 0;
     const card = lookupCard(this.catalogue, modelId);
     return {
       text,
@@ -89,7 +102,8 @@ export class OpenRouterProvider implements Provider {
       model: data.model ?? modelId,
       inputTokens,
       outputTokens,
-      costUsd: costFor(card, inputTokens, outputTokens),
+      cachedInputTokens: cachedInputTokens || undefined,
+      costUsd: costFor(card, inputTokens, outputTokens, cachedInputTokens),
     };
   }
 }
@@ -112,25 +126,10 @@ export class AnthropicProvider implements Provider {
   }
 
   async chat(modelId: string, req: ChatRequest): Promise<ChatResponse> {
-    const id = modelId.replace(/^anthropic\//, "");
-    const sys = req.messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
-    const messages = req.messages
-      .filter((m) => m.role !== "system")
-      .map((m) => ({ role: m.role, content: m.content }));
-    const body: Record<string, unknown> = {
-      model: id,
-      max_tokens: req.maxTokens ?? 1024,
-      messages,
-    };
-    if (sys) body.system = sys;
-    if (req.temperature !== undefined) body.temperature = req.temperature;
+    const body = buildAnthropicBody(modelId, req);
     const res = await this.fetchImpl(`${this.baseUrl}/messages`, {
       method: "POST",
-      headers: {
-        "x-api-key": this.apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
+      headers: this.headers(req.cache),
       body: JSON.stringify(body),
     });
     if (!res.ok) {
@@ -138,22 +137,82 @@ export class AnthropicProvider implements Provider {
       throw new Error(`Anthropic ${res.status}: ${text.slice(0, 500)}`);
     }
     const data = (await res.json()) as {
-      content?: { type: string; text?: string }[];
-      usage?: { input_tokens?: number; output_tokens?: number };
+      content?: { type: string; text?: string; tool_use?: unknown }[];
+      usage?: { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
       model?: string;
     };
     const text = (data.content ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
     const inputTokens = data.usage?.input_tokens ?? 0;
     const outputTokens = data.usage?.output_tokens ?? 0;
+    const cachedInputTokens = data.usage?.cache_read_input_tokens ?? 0;
+    const cacheWriteTokens = data.usage?.cache_creation_input_tokens ?? 0;
     const card = lookupCard(this.catalogue, modelId);
     return {
       text,
       model: data.model ?? modelId,
-      inputTokens,
+      inputTokens: inputTokens + cachedInputTokens + cacheWriteTokens,
       outputTokens,
-      costUsd: costFor(card, inputTokens, outputTokens),
+      cachedInputTokens: cachedInputTokens || undefined,
+      cacheWriteTokens: cacheWriteTokens || undefined,
+      costUsd: costFor(card, inputTokens + cachedInputTokens + cacheWriteTokens, outputTokens, cachedInputTokens, cacheWriteTokens),
     };
   }
+
+  private headers(cache?: boolean): Record<string, string> {
+    const h: Record<string, string> = {
+      "x-api-key": this.apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    };
+    if (cache) {
+      // Prompt caching is GA in 2026; the beta header is harmless to include
+      // for older orgs that haven't been migrated.
+      h["anthropic-beta"] = "prompt-caching-2024-07-31";
+    }
+    return h;
+  }
+}
+
+/**
+ * Build the Anthropic /messages request body. Threads `cache_control` onto
+ * the system block and the last tool definition when `req.cache === true`,
+ * which is the canonical pattern for caching the stable prompt prefix.
+ */
+export function buildAnthropicBody(modelId: string, req: ChatRequest): Record<string, unknown> {
+  const id = modelId.replace(/^anthropic\//, "");
+  const sys = req.messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
+  const messages = req.messages
+    .filter((m) => m.role !== "system")
+    .map((m) => ({ role: m.role, content: m.content }));
+  const body: Record<string, unknown> = {
+    model: id,
+    max_tokens: req.maxTokens ?? 1024,
+    messages,
+  };
+  if (sys) {
+    body.system = req.cache
+      ? [{ type: "text", text: sys, cache_control: { type: "ephemeral" } }]
+      : sys;
+  }
+  if (req.tools && req.tools.length > 0) {
+    // Anthropic's tool schema differs from OpenAI's: name/description/input_schema at top level.
+    const tools = req.tools.map((t, i) => {
+      const tool: Record<string, unknown> = {
+        name: t.function.name,
+        description: t.function.description ?? "",
+        input_schema: t.function.parameters ?? { type: "object", properties: {} },
+      };
+      // Mark the LAST tool with cache_control so everything before it
+      // (system + all preceding tools) gets cached together.
+      if (req.cache && i === (req.tools!.length - 1)) {
+        tool.cache_control = { type: "ephemeral" };
+      }
+      return tool;
+    });
+    body.tools = tools;
+  }
+  if (req.temperature !== undefined) body.temperature = req.temperature;
+  return body;
 }
 
 /* ─────────── OpenAI ─────────── */
@@ -200,13 +259,14 @@ export class OpenAIProvider implements Provider {
     }
     const data = (await res.json()) as {
       choices?: { message?: { content?: string; tool_calls?: any[] } }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
+      usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } };
       model?: string;
     };
     const text = data.choices?.[0]?.message?.content ?? "";
     const toolCalls = data.choices?.[0]?.message?.tool_calls;
     const inputTokens = data.usage?.prompt_tokens ?? 0;
     const outputTokens = data.usage?.completion_tokens ?? 0;
+    const cachedInputTokens = data.usage?.prompt_tokens_details?.cached_tokens ?? 0;
     const card = lookupCard(this.catalogue, modelId);
     return {
       text,
@@ -214,9 +274,137 @@ export class OpenAIProvider implements Provider {
       model: data.model ?? modelId,
       inputTokens,
       outputTokens,
-      costUsd: costFor(card, inputTokens, outputTokens),
+      cachedInputTokens: cachedInputTokens || undefined,
+      costUsd: costFor(card, inputTokens, outputTokens, cachedInputTokens),
     };
   }
+}
+
+/* ─────────── Anthropic Batch API ─────────── */
+
+export interface BatchRequestItem {
+  /** Caller-supplied id, echoed back in the result map. */
+  customId: string;
+  modelId: string;
+  request: ChatRequest;
+}
+
+export interface BatchSubmitResult {
+  /** Anthropic batch id. Use this with `getAnthropicBatch()` to poll. */
+  batchId: string;
+  /** Snapshot of the items submitted, indexed by customId. */
+  itemCount: number;
+}
+
+export interface BatchPollResult {
+  /** "in_progress" | "ended" | "canceling" | "canceled" — when "ended", `results` is populated. */
+  processingStatus: string;
+  /** Map of customId → response, only populated when status is "ended". */
+  results?: Map<string, ChatResponse>;
+}
+
+/**
+ * Submit a batch of chat requests to Anthropic's /v1/messages/batches API.
+ * Async by design: results dribble in over minutes; the caller polls via
+ * `getAnthropicBatch(batchId)`. 50% discount on input + output tokens.
+ *
+ * Use case: charters tagged `async: true` (overnight summarization, bulk
+ * extraction, fan-out research) where individual-call latency doesn't
+ * matter and the FiscalGate budget benefits from the discount.
+ */
+export async function submitAnthropicBatch(
+  apiKey: string,
+  items: BatchRequestItem[],
+  opts: { baseUrl?: string; fetchImpl?: typeof fetch } = {},
+): Promise<BatchSubmitResult> {
+  const baseUrl = opts.baseUrl ?? "https://api.anthropic.com/v1";
+  const f = opts.fetchImpl ?? fetch;
+  const requests = items.map((item) => ({
+    custom_id: item.customId,
+    params: buildAnthropicBody(item.modelId, item.request),
+  }));
+  const res = await f(`${baseUrl}/messages/batches`, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "message-batches-2024-09-24",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ requests }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Anthropic batch submit ${res.status}: ${text.slice(0, 500)}`);
+  }
+  const data = (await res.json()) as { id?: string };
+  if (!data.id) throw new Error("Anthropic batch submit: missing id in response");
+  return { batchId: data.id, itemCount: items.length };
+}
+
+/**
+ * Poll an Anthropic batch. When `processingStatus === "ended"`, fetches the
+ * results jsonl and returns a Map<customId, ChatResponse> with cost
+ * computed from the catalogue (Anthropic batch pricing is 50% off both
+ * sides — applied here so the FiscalGate sees real numbers).
+ */
+export async function getAnthropicBatch(
+  apiKey: string,
+  batchId: string,
+  opts: { baseUrl?: string; fetchImpl?: typeof fetch; catalogue?: ModelCard[] } = {},
+): Promise<BatchPollResult> {
+  const baseUrl = opts.baseUrl ?? "https://api.anthropic.com/v1";
+  const f = opts.fetchImpl ?? fetch;
+  const headers = {
+    "x-api-key": apiKey,
+    "anthropic-version": "2023-06-01",
+    "anthropic-beta": "message-batches-2024-09-24",
+  };
+  const meta = await f(`${baseUrl}/messages/batches/${batchId}`, { headers });
+  if (!meta.ok) throw new Error(`Anthropic batch poll ${meta.status}: ${await meta.text()}`);
+  const m = (await meta.json()) as { processing_status?: string; results_url?: string };
+  const status = m.processing_status ?? "in_progress";
+  if (status !== "ended" || !m.results_url) {
+    return { processingStatus: status };
+  }
+  const resultsRes = await f(m.results_url, { headers });
+  if (!resultsRes.ok) throw new Error(`Anthropic batch results ${resultsRes.status}`);
+  const text = await resultsRes.text();
+  const results = new Map<string, ChatResponse>();
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const row = JSON.parse(line) as {
+      custom_id?: string;
+      result?: {
+        type?: string;
+        message?: {
+          content?: { type: string; text?: string }[];
+          model?: string;
+          usage?: { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
+        };
+      };
+    };
+    if (!row.custom_id || row.result?.type !== "succeeded" || !row.result.message) continue;
+    const msg = row.result.message;
+    const inputTokens = msg.usage?.input_tokens ?? 0;
+    const outputTokens = msg.usage?.output_tokens ?? 0;
+    const cachedInputTokens = msg.usage?.cache_read_input_tokens ?? 0;
+    const cacheWriteTokens = msg.usage?.cache_creation_input_tokens ?? 0;
+    const card = lookupCard(opts.catalogue, msg.model ? `anthropic/${msg.model.replace(/^anthropic\//, "")}` : "");
+    const totalInput = inputTokens + cachedInputTokens + cacheWriteTokens;
+    const fullCost = costFor(card, totalInput, outputTokens, cachedInputTokens, cacheWriteTokens);
+    results.set(row.custom_id, {
+      text: (msg.content ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join(""),
+      model: msg.model ?? "unknown",
+      inputTokens: totalInput,
+      outputTokens,
+      cachedInputTokens: cachedInputTokens || undefined,
+      cacheWriteTokens: cacheWriteTokens || undefined,
+      // Batch is 50% off both input + output.
+      costUsd: fullCost * 0.5,
+    });
+  }
+  return { processingStatus: status, results };
 }
 
 /* ─────────── defaultProviders ─────────── */

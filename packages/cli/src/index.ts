@@ -10,6 +10,7 @@ import {
   MerkleAudit,
   buildArticle12Bundle,
   PolicyEngine,
+  log,
   type ActivityBus,
   type ActivityEvent,
   type ArtifactFormat,
@@ -18,6 +19,7 @@ import {
 } from "@praetor/core";
 import { MockPayments, MnemoPayAdapter, type PaymentsAdapter, type MnemoPayClient } from "@praetor/payments";
 import { EchoAgent, LlmAgent, NativePraetorEngine, CoordinatorAgent, type AgentAdapter } from "@praetor/agents";
+import { registerCodingTools } from "@praetor/coding-agent";
 import { defaultRegistry, type FiscalGate } from "@praetor/tools";
 import { defaultScraper, type ScrapeBackend } from "@praetor/scrape";
 import { chunkText, defaultKnowledgeBase } from "@praetor/knowledge";
@@ -26,8 +28,10 @@ import { DesignPack, type HtmlInCanvas3DSpec, type SplinePresetId } from "@praet
 import { renderSite, submitIndexNow, extractGeoProfile, analyzeContentSeo, generateOutreachSequence, generateOgImageUrl, type SiteManifest } from "@praetor/seo";
 import { defaultBusinessOps, auditedBusinessOps, type AuditSink } from "@praetor/business-ops";
 import { SysadminModule } from "@praetor/sysadmin";
-import { SandboxDispatcher, MockSandboxFactory } from "@praetor/sandbox";
+import { SandboxDispatcher, MockSandboxFactory, LocalSandboxFactory, DockerSandboxFactory } from "@praetor/sandbox";
 import { capture_screen, analyze_image } from "@praetor/vision";
+import { PraetorVoice, KokoroAdapter, AzureSpeechAdapter, type VoiceBackend } from "@praetor/voice";
+import { PraetorBrowser, PlaywrightAdapter } from "@praetor/browser";
 import { post_x_tweet, post_tiktok_video, schedule_cron_job } from "@praetor/social";
 import {
   defaultSelector as worldGenSelector,
@@ -156,13 +160,34 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
   const kb = defaultKnowledgeBase({ missionId });
   const design = new DesignPack();
   const outDir = resolve(process.cwd(), "praetor-out");
+  const repoRoot = resolve(process.env.PRAETOR_REPO_ROOT ?? process.cwd());
+
+  // Coding-agent toolset (read/write/edit/apply_edit/list/grep/repo_map/find_symbol/
+  // load_conventions/git_*/run_tests/run_command). Each tool is gated to
+  // role="coding" via its own allowedRoles, so the LLM only sees them when
+  // the charter declares an agent with that role.
+  registerCodingTools(reg, repoRoot);
   
   const rawOps = defaultBusinessOps(process.env);
   const ops = audit ? auditedBusinessOps(rawOps, audit) : rawOps;
   const scraper = defaultScraper(process.env);
   const games = defaultRenderer({ outDir: join(outDir, "games") });
 
-  const sandbox = await new SandboxDispatcher({ mock: new MockSandboxFactory() }).create(charter.sandbox?.kind ?? "mock");
+  // Dispatcher is wired with all native factories. Charters can declare
+  // `sandbox: { kind: "auto" | "mock" | "local" | "docker" | "firecracker" }`.
+  // `auto` (no kind set) probes Docker and falls back to mock — so any
+  // user with Docker installed gets real container isolation transparently.
+  const sandboxDispatcher = new SandboxDispatcher({
+    mock: new MockSandboxFactory(),
+    local: new LocalSandboxFactory({ cwd: repoRoot }),
+    docker: new DockerSandboxFactory({
+      // Hardening defaults: --memory 2g, --cpus 2.0, --pids-limit 256,
+      // --read-only, --cap-drop ALL, --security-opt no-new-privileges,
+      // refuse mounts of /, /var/run/docker.sock, /proc, etc.
+      mounts: [{ host: repoRoot, container: "/work", readonly: true }],
+    }),
+  });
+  const sandbox = await sandboxDispatcher.create(charter.sandbox?.kind ?? "auto");
   const sysadmin = new SysadminModule(sandbox);
 
   reg.register(
@@ -703,10 +728,15 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
     }
   );
 
+  // Sandbox-routed sysadmin tools — distinct from the coding-agent's native
+  // repo file/exec tools. These use SysadminModule(sandbox) so a charter
+  // running under a microvm sandbox can do file/command ops inside the
+  // sandbox rather than against the host repo. Renamed to `sandbox_*` to
+  // disambiguate from coding-agent's `read_file` / `write_file` / `run_command`.
   reg.register(
     {
-      name: "run_command",
-      description: "Execute a terminal command (PowerShell/Bash) on the host machine.",
+      name: "sandbox_run_command",
+      description: "Execute a terminal command (PowerShell/Bash) inside the configured sandbox.",
       schema: {
         type: "object",
         properties: {
@@ -715,7 +745,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["command"]
       },
-      tags: ["sysadmin", "os", "terminal", "execute"],
+      tags: ["sysadmin", "os", "terminal", "execute", "sandbox"],
       allowedRoles: ["coding"],
       metadata: toolMeta("native", "sandbox_command_run", ["shell", "filesystem", "network"], "on-side-effect", "microvm", "needs-live-test")
     },
@@ -727,8 +757,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
 
   reg.register(
     {
-      name: "read_file",
-      description: "Read the contents of a file on the local file system.",
+      name: "sandbox_read_file",
+      description: "Read the contents of a file inside the configured sandbox.",
       schema: {
         type: "object",
         properties: {
@@ -736,7 +766,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["path"]
       },
-      tags: ["sysadmin", "os", "file", "read"],
+      tags: ["sysadmin", "os", "file", "read", "sandbox"],
       allowedRoles: ["coding"],
       metadata: toolMeta("native", "sandbox_file_read", ["filesystem"], "never", "microvm", "needs-live-test")
     },
@@ -749,8 +779,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
 
   reg.register(
     {
-      name: "write_file",
-      description: "Write or overwrite contents to a file on the local file system.",
+      name: "sandbox_write_file",
+      description: "Write or overwrite a file inside the configured sandbox.",
       schema: {
         type: "object",
         properties: {
@@ -759,7 +789,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["path", "content"]
       },
-      tags: ["sysadmin", "os", "file", "write"],
+      tags: ["sysadmin", "os", "file", "write", "sandbox"],
       allowedRoles: ["coding"],
       metadata: toolMeta("native", "sandbox_file_write", ["filesystem"], "on-side-effect", "microvm", "needs-live-test")
     },
@@ -772,8 +802,8 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
 
   reg.register(
     {
-      name: "list_dir",
-      description: "List all files and directories in a given path.",
+      name: "sandbox_list_dir",
+      description: "List all files and directories in a path inside the configured sandbox.",
       schema: {
         type: "object",
         properties: {
@@ -781,7 +811,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
         },
         required: ["path"]
       },
-      tags: ["sysadmin", "os", "file", "list"],
+      tags: ["sysadmin", "os", "file", "list", "sandbox"],
       allowedRoles: ["coding"],
       metadata: toolMeta("native", "sandbox_file_list", ["filesystem"], "never", "microvm", "needs-live-test")
     },
@@ -795,6 +825,199 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
   // Vision
   reg.register({ name: capture_screen.name, description: capture_screen.description, schema: capture_screen.parameters as any, metadata: toolMeta("adapter", "computer_screen_capture", ["browser", "filesystem"], "always", "host", "needs-live-test") }, capture_screen.execute);
   reg.register({ name: analyze_image.name, description: analyze_image.description, schema: analyze_image.parameters as any, costUsd: analyze_image.costUsd, metadata: toolMeta("mock", "vision_image_analyze", ["spend"], "on-cost", "remote-provider", "stub") }, analyze_image.execute);
+
+  // Voice — Praetor-native runtime; Kokoro 82M default, Azure Speech adapter
+  // when AZURE_SPEECH_KEY is in env. Audio is written to praetor-out/voice/
+  // and the absolute path is returned so downstream tools (compositor, social
+  // poster) can pick it up.
+  const voiceRuntime = new PraetorVoice();
+  voiceRuntime.attach("kokoro", new KokoroAdapter());
+  if (process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) {
+    voiceRuntime.attach("azure-speech", new AzureSpeechAdapter({
+      subscriptionKey: process.env.AZURE_SPEECH_KEY,
+      region: process.env.AZURE_SPEECH_REGION,
+    }));
+  }
+  reg.register<{ text: string; voice?: string; backend?: VoiceBackend; rate?: string }, { success: boolean; audioPath: string; backend: string; licenseFamily: string; durationMs?: number }>(
+    {
+      name: "voice_synthesize",
+      description: "Synthesize speech from text via PraetorVoice. Default backend is Kokoro 82M (Apache 2.0). Pass backend='azure-speech' to opt into proprietary high-quality VO. Returns the absolute path to the produced audio file.",
+      schema: {
+        type: "object",
+        properties: {
+          text: { type: "string" },
+          voice: { type: "string", description: "Backend-specific voice id (e.g. af_bella for Kokoro, en-US-AndrewNeural for Azure)." },
+          backend: { type: "string", enum: ["kokoro", "azure-speech"] },
+          rate: { type: "string", description: "SSML rate. Defaults to +0%." },
+        },
+        required: ["text"],
+      },
+      tags: ["voice", "tts", "audio"],
+      metadata: toolMeta("native", "voice_synthesize", ["filesystem", "spend"], "on-cost", "host", "needs-live-test", "Praetor-native runtime; Kokoro is Apache, Azure adapter is proprietary."),
+    },
+    async ({ text, voice, backend, rate }) => {
+      const result = await voiceRuntime.synthesize({ text: String(text), voice, backend, rate });
+      const dir = join(outDir, "voice");
+      mkdirSync(dir, { recursive: true });
+      const ext = result.mime === "audio/mpeg" ? "mp3" : "wav";
+      const filename = `voice-${Date.now().toString(36)}.${ext}`;
+      const filePath = join(dir, filename);
+      writeFileSync(filePath, result.audioBuffer);
+      publishArtifact(activity, missionId, `voice-${filename}`, "text", filePath);
+      return {
+        success: true,
+        audioPath: filePath,
+        backend: result.backend,
+        licenseFamily: result.licenseFamily,
+        durationMs: result.durationMs,
+      };
+    },
+  );
+
+  // Browser — Praetor-native, lazy-loads playwright-core. Single shared
+  // session per mission so charters can navigate then click then snapshot
+  // without re-launching Chromium.
+  const browserSession = new PraetorBrowser({
+    adapter: new PlaywrightAdapter(),
+    bus: activity,
+    missionId,
+  });
+
+  reg.register<{ url: string; waitUntil?: "load" | "domcontentloaded" | "networkidle"; timeoutMs?: number }, { success: boolean; url: string }>(
+    {
+      name: "browser_navigate",
+      description: "Navigate the headless browser to a URL. Lazy-launches Chromium on first call. Subsequent browser_* tools reuse the same page.",
+      schema: {
+        type: "object",
+        properties: {
+          url: { type: "string" },
+          waitUntil: { type: "string", enum: ["load", "domcontentloaded", "networkidle"] },
+          timeoutMs: { type: "integer" },
+        },
+        required: ["url"],
+      },
+      tags: ["browser", "navigation"],
+      metadata: toolMeta("native", "browser_navigate", ["network", "browser"], "on-side-effect", "browser", "needs-live-test"),
+    },
+    async ({ url, waitUntil, timeoutMs }) => {
+      await browserSession.navigate(String(url), { waitUntil, timeoutMs });
+      return { success: true, url: String(url) };
+    },
+  );
+
+  reg.register<{ selector: string; button?: "left" | "right" | "middle"; timeoutMs?: number }, { success: boolean }>(
+    {
+      name: "browser_click",
+      description: "Click an element by CSS / role-name selector. Pair with browser_snapshot to discover selectors.",
+      schema: {
+        type: "object",
+        properties: {
+          selector: { type: "string" },
+          button: { type: "string", enum: ["left", "right", "middle"] },
+          timeoutMs: { type: "integer" },
+        },
+        required: ["selector"],
+      },
+      tags: ["browser", "input"],
+      metadata: toolMeta("native", "browser_click", ["browser"], "on-side-effect", "browser", "needs-live-test"),
+    },
+    async ({ selector, button, timeoutMs }) => {
+      await browserSession.click(String(selector), { button, timeoutMs });
+      return { success: true };
+    },
+  );
+
+  reg.register<{ selector: string; value: string; timeoutMs?: number }, { success: boolean }>(
+    {
+      name: "browser_fill",
+      description: "Fill a form field by selector. Use for inputs, textareas, contenteditable.",
+      schema: {
+        type: "object",
+        properties: {
+          selector: { type: "string" },
+          value: { type: "string" },
+          timeoutMs: { type: "integer" },
+        },
+        required: ["selector", "value"],
+      },
+      tags: ["browser", "input"],
+      metadata: toolMeta("native", "browser_fill", ["browser"], "on-side-effect", "browser", "needs-live-test"),
+    },
+    async ({ selector, value, timeoutMs }) => {
+      await browserSession.fill(String(selector), String(value), { timeoutMs });
+      return { success: true };
+    },
+  );
+
+  reg.register<{ keys: string; timeoutMs?: number }, { success: boolean }>(
+    {
+      name: "browser_press",
+      description: "Press a key combination on the active page (e.g. 'Enter', 'Control+A').",
+      schema: {
+        type: "object",
+        properties: {
+          keys: { type: "string" },
+          timeoutMs: { type: "integer" },
+        },
+        required: ["keys"],
+      },
+      tags: ["browser", "input"],
+      metadata: toolMeta("native", "browser_press", ["browser"], "on-side-effect", "browser", "needs-live-test"),
+    },
+    async ({ keys, timeoutMs }) => {
+      await browserSession.press(String(keys), { timeoutMs });
+      return { success: true };
+    },
+  );
+
+  reg.register<{ html?: boolean }, { url: string; title: string; a11y: string; html?: string; elements: { selector: string; label?: string }[] }>(
+    {
+      name: "browser_snapshot",
+      description: "Capture the current page as a compact accessibility outline + actionable element refs. Cheap, structured, LLM-friendly.",
+      schema: {
+        type: "object",
+        properties: {
+          html: { type: "boolean", description: "Include raw HTML in the snapshot. Default false." },
+        },
+        required: [],
+      },
+      tags: ["browser", "context"],
+      metadata: toolMeta("native", "browser_snapshot", ["browser"], "never", "browser", "needs-live-test"),
+    },
+    async ({ html }) => {
+      const snap = await browserSession.snapshot({ html: !!html });
+      return {
+        url: snap.url,
+        title: snap.title,
+        a11y: snap.a11y,
+        html: snap.html,
+        elements: snap.elements.map((e) => ({ selector: e.selector, label: e.label })),
+      };
+    },
+  );
+
+  reg.register<{ fullPage?: boolean }, { success: boolean; path: string }>(
+    {
+      name: "browser_screenshot",
+      description: "PNG screenshot of the current page. Saves to praetor-out/browser/ and returns the absolute path.",
+      schema: {
+        type: "object",
+        properties: { fullPage: { type: "boolean" } },
+        required: [],
+      },
+      tags: ["browser", "vision"],
+      metadata: toolMeta("native", "browser_screenshot", ["browser", "filesystem"], "never", "browser", "needs-live-test"),
+    },
+    async ({ fullPage }) => {
+      const buf = await browserSession.screenshot({ fullPage: !!fullPage });
+      const dir = join(outDir, "browser");
+      mkdirSync(dir, { recursive: true });
+      const filePath = join(dir, `screenshot-${Date.now().toString(36)}.png`);
+      writeFileSync(filePath, buf);
+      publishArtifact(activity, missionId, `browser-${Date.now().toString(36)}`, "image", filePath);
+      return { success: true, path: filePath };
+    },
+  );
 
   // Social
   reg.register({ name: post_x_tweet.name, description: post_x_tweet.description, schema: post_x_tweet.parameters as any, costUsd: post_x_tweet.costUsd, allowedRoles: ["marketer", "developer"], metadata: toolMeta("mock", "social_x_post", ["reputation", "external_publish"], "always", "remote-provider", "stub") }, post_x_tweet.execute);
@@ -902,18 +1125,18 @@ async function cmdRun(args: string[]) {
   const audit = new MerkleAudit();
   if (verbose) {
     audit.on((event, chainHash, index) => {
-      process.stderr.write(JSON.stringify({ i: index, ts: event.ts, type: event.type, chain: chainHash.slice(0, 12), data: event.data }) + "\n");
+      log.debug("audit.event", { i: index, ts: event.ts, type: event.type, chain: chainHash.slice(0, 12), data: event.data });
     });
   }
   
   let payments: PaymentsAdapter;
   const mnemoKey = process.env.MNEMOPAY_API_KEY;
   if (mnemoKey) {
-    if (verbose) process.stderr.write("[praetor] using live MnemoPay fiscal gate\\n");
+    if (verbose) log.info("payments", { backend: "mnemopay-live" });
     const baseUrl = process.env.MNEMOPAY_BASE_URL || "https://api.mnemopay.com";
     payments = new MnemoPayAdapter(new LiveMnemoPayClient(mnemoKey, baseUrl));
   } else {
-    if (verbose) process.stderr.write("[praetor] using MockPayments fiscal gate (no MNEMOPAY_API_KEY)\\n");
+    if (verbose) log.info("payments", { backend: "mock" });
     payments = new MockPayments();
   }
 
@@ -922,7 +1145,7 @@ async function cmdRun(args: string[]) {
   activity.publish({ kind: "milestone", missionId, text: "Mission started", ts: new Date().toISOString() });
   const registry = await buildEnhancedRegistry(charter, missionId, audit, activity);
   const agent = pickAgent(charter, payments, audit, registry);
-  if (verbose) process.stderr.write(JSON.stringify({ agent: agent.name }) + "\n");
+  if (verbose) log.info("agent.selected", { agent: agent.name });
   const result = await runMission({
     charter,
     payments,
@@ -1045,6 +1268,63 @@ async function cmdDesignServe(args: string[]) {
   console.log(`praetor design serve: ${handle.url}`);
 }
 
+async function cmdServe(args: string[]): Promise<void> {
+  // Auto-set dev mode so the api boots without real Supabase credentials.
+  if (!process.env.PRAETOR_DEV_MODE) {
+    process.env.PRAETOR_DEV_MODE = "1";
+  }
+
+  // Load dotenv so ANTHROPIC_API_KEY and friends are available.
+  loadDotenv(
+    resolve(process.cwd(), ".env"),
+    resolve(process.cwd(), "..", "mnemopay-sdk", ".env"),
+    resolve(process.cwd(), "..", "..", "mnemopay-sdk", ".env"),
+  );
+
+  // Dynamic import avoids a circular tsconfig project reference (api→cli→api).
+  // The import is typed via an explicit interface so the compiler is satisfied
+  // without needing @praetor/api in the references array.
+  interface ApiLib {
+    createApp(): {
+      listen(port: number, host: string, cb: () => void): { close(cb: () => void): void };
+    };
+    env: { port: number; host: string };
+  }
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore — runtime-only dep; no tsconfig reference to avoid api↔cli cycle
+  const { createApp, env } = await import("@praetor/api/lib") as unknown as ApiLib;
+  const app = createApp();
+  const portArg = flag(args, "--port");
+  const port = portArg ? Number(portArg) : env.port;
+  const host = flag(args, "--host") ?? env.host;
+
+  const server = app.listen(port, host, () => {
+    const base = `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
+    process.stdout.write(
+      [
+        `[praetor-api] listening on ${base}`,
+        `[praetor-api] dev mode ON — any bearer token authenticates as dev-user`,
+        ``,
+        `  curl example:`,
+        `    curl -X POST ${base}/api/v1/missions \\`,
+        `      -H "Authorization: Bearer dev:any" \\`,
+        `      -H "Content-Type: application/json" \\`,
+        `      -d '{"goal":"hello world"}'`,
+        ``,
+      ].join("\n"),
+    );
+  });
+
+  const stop = (): void => {
+    server.close(() => process.exit(0));
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+
+  // Keep the process alive.
+  await new Promise<never>(() => {});
+}
+
 function usage(): never {
   console.error([
     "usage:",
@@ -1052,8 +1332,10 @@ function usage(): never {
     "  praetor article12 --in <mission.json> --out <bundle-dir> [--operator <id>]",
     "  praetor ingest <url> [--mission <id>] [--backend fetch|crawl4ai|playwright-mcp|firecrawl] [--chunk <chars>]",
     "  praetor design serve <dir> [--port <n>] [--host <h>]",
+    "  praetor serve [--port <n>] [--host <h>]",
     "  praetor doctor",
     "  praetor tools [--role <role>]",
+    "  praetor smoke [--live] [--include <substring>] [--exclude <substring>] [--out <path>]",
   ].join("\n"));
   exit(1);
 }
@@ -1145,6 +1427,11 @@ async function main() {
     case "design": return cmdDesignServe(rest);
     case "doctor": return cmdDoctor();
     case "tools": return cmdTools(rest);
+    case "serve": return cmdServe(rest);
+    case "smoke": {
+      const mod = await import("./smoke.js");
+      return mod.cmdSmoke(rest);
+    }
     default: usage();
   }
 }

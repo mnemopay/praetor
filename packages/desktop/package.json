@@ -1,0 +1,41 @@
+{
+  "name": "@praetor/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Praetor Desktop — Electron-wrapped consumer-facing app. Bundles @praetor/api + @praetor/dashboard + headless Chromium. The user downloads one binary and runs charters from a single window.",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node --experimental-vm-modules ./scripts/start-electron.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@praetor/api": "*",
+    "@praetor/dashboard": "*"
+  },
+  "peerDependenciesMeta": {
+    "electron": {
+      "optional": true
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "README.md",
+    "LICENSE"
+  ],
+  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mnemopay/praetor.git",
+    "directory": "packages/desktop"
+  }
+}

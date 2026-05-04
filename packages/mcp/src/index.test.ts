@@ -49,6 +49,64 @@ describe("McpServer", () => {
   });
 });
 
+describe("McpServer hardening", () => {
+  function makeServerWithMany(allowTools?: string[], denyTools?: string[]) {
+    const reg = new ToolRegistry();
+    reg.register(
+      { name: "safe_read", description: "read", schema: { type: "object", properties: {}, required: [] } },
+      async () => ({ ok: true }),
+    );
+    reg.register(
+      { name: "dangerous_write", description: "write", schema: { type: "object", properties: {}, required: [] } },
+      async () => ({ ok: true }),
+    );
+    reg.register(
+      { name: "destructive_run_command", description: "exec", schema: { type: "object", properties: {}, required: [] } },
+      async () => ({ ok: true }),
+    );
+    return new McpServer({ registry: reg, allowTools, denyTools });
+  }
+
+  it("denyTools hides + rejects flagged tools", async () => {
+    const s = makeServerWithMany(undefined, ["dangerous_write", "destructive_run_command"]);
+    const list = await s.handle({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const names = (list?.result as { tools: { name: string }[] }).tools.map((t) => t.name);
+    expect(names).toEqual(["safe_read"]);
+    const denied = await s.handle({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "dangerous_write", arguments: {} } });
+    expect(denied?.error?.code).toBe(-32601);
+    expect(denied?.error?.message).toMatch(/not exposed/);
+  });
+
+  it("allowTools restricts to a curated subset (deny wins on conflict)", async () => {
+    const s = makeServerWithMany(["safe_read", "dangerous_write"], ["dangerous_write"]);
+    const list = await s.handle({ jsonrpc: "2.0", id: 1, method: "tools/list" });
+    const names = (list?.result as { tools: { name: string }[] }).tools.map((t) => t.name);
+    expect(names).toEqual(["safe_read"]); // dangerous_write hidden by deny
+    const blocked = await s.handle({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "destructive_run_command", arguments: {} } });
+    expect(blocked?.error?.code).toBe(-32601);
+  });
+
+  it("rejects oversized arguments", async () => {
+    const reg = new ToolRegistry();
+    reg.register(
+      { name: "echo", description: "echo", schema: { type: "object", properties: { data: { type: "string" } }, required: [] } },
+      async (args) => args,
+    );
+    const s = new McpServer({ registry: reg, limits: { maxArgsBytes: 100 } });
+    const huge = "x".repeat(10_000);
+    const r = await s.handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "echo", arguments: { data: huge } } });
+    expect(r?.error?.code).toBe(-32602);
+    expect(r?.error?.message).toMatch(/exceed.*100 bytes/);
+  });
+
+  it("rejects malformed tool name (non-string or > 256 chars)", async () => {
+    const s = makeServerWithMany();
+    const longName = "x".repeat(300);
+    const r = await s.handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: longName, arguments: {} } });
+    expect(r?.error?.code).toBe(-32602);
+  });
+});
+
 describe("McpClient (loopback)", () => {
   it("initializes + lists + calls tools end to end", async () => {
     const s = makeServerWithEcho();

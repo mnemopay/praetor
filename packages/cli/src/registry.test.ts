@@ -10,6 +10,9 @@ describe("Praetor runtime registry", () => {
       budget: { maxUsd: 1, approvalThresholdUsd: 0 },
       agents: [{ role: "developer" }],
       outputs: ["result"],
+      // Pin to mock so the test never tries to spin up a real Docker
+      // container (auto-mode would, since Docker is available locally).
+      sandbox: { kind: "mock" },
     });
 
     const registry = await buildEnhancedRegistry(charter, "metadata-check");

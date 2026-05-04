@@ -36,6 +36,66 @@ function makeScene(overrides: Partial<PraetorScene> = {}): PraetorScene {
   };
 }
 
+describe("claude-skill target", () => {
+  it("emits a SKILL.md, tokens.json, preview.html, usage.md under .claude/skills/", () => {
+    const scene = makeScene({
+      targets: ["html", "claude-skill"],
+      meta: { title: "Praetor Hero", description: "Hero block for the Praetor product home." },
+    });
+    const result = render(scene, "claude-skill");
+    const paths = result.files.map((f) => f.path).sort();
+    expect(paths).toEqual([
+      ".claude/skills/praetor-test_hero/SKILL.md",
+      ".claude/skills/praetor-test_hero/preview.html",
+      ".claude/skills/praetor-test_hero/tokens.json",
+      ".claude/skills/praetor-test_hero/usage.md",
+    ]);
+  });
+
+  it("SKILL.md frontmatter has name + description", () => {
+    const scene = makeScene({
+      targets: ["html", "claude-skill"],
+      meta: { title: "T", description: "Production-grade design system for Praetor charters." },
+    });
+    const result = render(scene, "claude-skill");
+    const skillMd = result.files.find((f) => f.path.endsWith("SKILL.md"))!;
+    expect(skillMd.contents.startsWith("---\n")).toBe(true);
+    expect(skillMd.contents).toMatch(/^name: praetor-test_hero/m);
+    expect(skillMd.contents).toMatch(/^description: .*Production-grade design system/m);
+  });
+
+  it("tokens.json is a valid JSON parse and round-trips the design token tree", () => {
+    const scene = makeScene({ targets: ["html", "claude-skill"] });
+    const result = render(scene, "claude-skill");
+    const tokensFile = result.files.find((f) => f.path.endsWith("tokens.json"))!;
+    const parsed = JSON.parse(tokensFile.contents);
+    expect(parsed.color.bg).toBe(tokens.color.bg);
+    expect(parsed.typeStack.sans).toBe(tokens.typeStack.sans);
+    expect(parsed.layout.maxContentWidthPx).toBe(tokens.layout.maxContentWidthPx);
+  });
+
+  it("preview.html is the same artifact the html target produces", () => {
+    const scene = makeScene({ targets: ["html", "claude-skill"] });
+    const claudeResult = render(scene, "claude-skill");
+    const htmlResult = render(scene, "html");
+    const previewHtml = claudeResult.files.find((f) => f.path.endsWith("preview.html"))!;
+    expect(previewHtml.contents).toBe(htmlResult.files[0].contents);
+  });
+
+  it("description with special chars (colons, quotes) is YAML-escaped", () => {
+    const scene = makeScene({
+      targets: ["html", "claude-skill"],
+      meta: { title: "T", description: 'Praetor: "the design system" for agents.' },
+    });
+    const result = render(scene, "claude-skill");
+    const skillMd = result.files.find((f) => f.path.endsWith("SKILL.md"))!;
+    // Must be quoted because of the embedded colon + double-quotes.
+    const descLine = skillMd.contents.split("\n").find((l) => l.startsWith("description:"));
+    expect(descLine).toMatch(/^description: ".*"$/);
+    expect(descLine).toContain('\\"');
+  });
+});
+
 describe("renderer.dispatch", () => {
   it("rejects targets not declared by the scene", () => {
     const scene = makeScene({ targets: ["html"] });

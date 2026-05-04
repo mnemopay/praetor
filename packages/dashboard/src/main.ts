@@ -1,25 +1,137 @@
 import "./style.css";
-// In-memory dev-mode auth shim — Praetor's native replacement for the
-// Supabase SDK in the dashboard. For production deployments needing real
-// auth, ship `@praetor/auth-supabase` (or `-clerk`, `-descope`) as opt-in.
+import {
+  createClient as createSupabaseClient,
+  type SupabaseClient,
+  type Session as SupabaseSession,
+} from "@supabase/supabase-js";
+
+// Praetor dashboard auth.
+//
+// Three modes, in order of precedence:
+//
+//   1. PRODUCTION — VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY are set.
+//      Uses real @supabase/supabase-js. Email magic-link or password login.
+//      Tokens are real JWTs that the API server verifies via supabase.auth.getUser().
+//
+//   2. DEV-MODE BYPASS — VITE_PRAETOR_DEV_MODE=1, no Supabase configured.
+//      Uses an in-memory shim that mints a fake `dev:<email>` token. The API
+//      server's PRAETOR_DEV_MODE auth bypass accepts any non-empty bearer
+//      token under the same flag, so the loop closes without a real backend.
+//
+//   3. UNCONFIGURED — neither of the above. Renders a config-error screen
+//      instructing the operator to copy .env.example to .env and either
+//      configure Supabase or set VITE_PRAETOR_DEV_MODE=1.
+//
+// The shim is opt-in only. Removing the inline createClient that auto-signed
+// every visitor in as `dev-user` was task #20 — production deployments must
+// fail closed if Supabase is missing, not silently issue a fake session.
+
 type Session = { user: { id: string; email: string }; access_token: string };
-function createClient(_url: string, _key: string) {
-  let session: Session | null = { user: { id: "dev-user", email: "dev@praetor.dev" }, access_token: "dev:dev-user" };
+
+interface MinimalAuthClient {
+  auth: {
+    getSession(): Promise<{ data: { session: Session | null } }>;
+    getUser(): Promise<{ data: { user: Session["user"] | null }; error: { message: string } | null }>;
+    onAuthStateChange(cb: (evt: string, s: Session | null) => void): {
+      data: { subscription: { unsubscribe(): void } };
+    };
+    signInWithPassword(args: { email: string; password: string }): Promise<{
+      data: { user: Session["user"] | null; session: Session | null };
+      error: { message: string } | null;
+    }>;
+    signUp(args: { email: string; password: string }): Promise<{
+      data: { user: Session["user"] | null; session: Session | null };
+      error: { message: string } | null;
+    }>;
+    signOut(): Promise<{ error: { message: string } | null }>;
+  };
+}
+
+function adaptSupabase(client: SupabaseClient): MinimalAuthClient {
+  const toSession = (s: SupabaseSession | null): Session | null => {
+    if (!s) return null;
+    return {
+      user: { id: s.user.id, email: s.user.email ?? "" },
+      access_token: s.access_token,
+    };
+  };
+  return {
+    auth: {
+      async getSession() {
+        const { data } = await client.auth.getSession();
+        return { data: { session: toSession(data.session) } };
+      },
+      async getUser() {
+        const { data, error } = await client.auth.getUser();
+        return {
+          data: {
+            user: data.user
+              ? { id: data.user.id, email: data.user.email ?? "" }
+              : null,
+          },
+          error: error ? { message: error.message } : null,
+        };
+      },
+      onAuthStateChange(cb) {
+        const sub = client.auth.onAuthStateChange((evt, s) => cb(evt, toSession(s)));
+        return { data: { subscription: { unsubscribe: () => sub.data.subscription.unsubscribe() } } };
+      },
+      async signInWithPassword(args) {
+        const { data, error } = await client.auth.signInWithPassword(args);
+        return {
+          data: {
+            user: data.user ? { id: data.user.id, email: data.user.email ?? "" } : null,
+            session: toSession(data.session),
+          },
+          error: error ? { message: error.message } : null,
+        };
+      },
+      async signUp(args) {
+        const { data, error } = await client.auth.signUp(args);
+        return {
+          data: {
+            user: data.user ? { id: data.user.id, email: data.user.email ?? "" } : null,
+            session: toSession(data.session),
+          },
+          error: error ? { message: error.message } : null,
+        };
+      },
+      async signOut() {
+        const { error } = await client.auth.signOut();
+        return { error: error ? { message: error.message } : null };
+      },
+    },
+  };
+}
+
+function createDevModeShim(): MinimalAuthClient {
+  let session: Session | null = null;
   const listeners: Array<(evt: string, s: Session | null) => void> = [];
   return {
     auth: {
       async getSession() { return { data: { session } }; },
-      async getUser() { return { data: { user: session?.user ?? null }, error: null }; },
-      onAuthStateChange(cb: (evt: string, s: Session | null) => void) {
-        listeners.push(cb);
-        return { data: { subscription: { unsubscribe() { const i = listeners.indexOf(cb); if (i >= 0) listeners.splice(i, 1); } } } };
+      async getUser() {
+        return { data: { user: session?.user ?? null }, error: null };
       },
-      async signInWithPassword({ email }: { email: string; password: string }) {
+      onAuthStateChange(cb) {
+        listeners.push(cb);
+        return {
+          data: {
+            subscription: {
+              unsubscribe() {
+                const i = listeners.indexOf(cb);
+                if (i >= 0) listeners.splice(i, 1);
+              },
+            },
+          },
+        };
+      },
+      async signInWithPassword({ email }) {
         session = { user: { id: email, email }, access_token: `dev:${email}` };
         listeners.forEach((cb) => cb("SIGNED_IN", session));
         return { data: { user: session.user, session }, error: null };
       },
-      async signUp({ email }: { email: string; password: string }) {
+      async signUp({ email }) {
         session = { user: { id: email, email }, access_token: `dev:${email}` };
         listeners.forEach((cb) => cb("SIGNED_IN", session));
         return { data: { user: session.user, session }, error: null };
@@ -78,6 +190,20 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8788").
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 const SUPABASE_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+const DEV_MODE_BYPASS = import.meta.env.VITE_PRAETOR_DEV_MODE === "1";
+
+function buildAuthClient(): MinimalAuthClient | null {
+  if (SUPABASE_CONFIGURED) {
+    const real = createSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    });
+    return adaptSupabase(real);
+  }
+  if (DEV_MODE_BYPASS) {
+    return createDevModeShim();
+  }
+  return null;
+}
 
 const THEMES = ["dark", "solarized-light", "solarized-dark"] as const;
 type Theme = (typeof THEMES)[number];
@@ -148,7 +274,7 @@ let currentTheme: Theme = "dark";
 const app = document.querySelector<HTMLDivElement>("#app");
 if (!app) throw new Error("dashboard: #app container not found");
 
-const supabase = SUPABASE_CONFIGURED ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+const supabase = buildAuthClient();
 
 let session: Session | null = null;
 let currentRoute: Route = "chat";
@@ -223,11 +349,10 @@ void bootstrap();
 
 async function bootstrap() {
   applyTheme(loadTheme());
-  if (!SUPABASE_CONFIGURED) {
+  if (!supabase) {
     renderConfigError();
     return;
   }
-  if (!supabase) return;
   const { data } = await supabase.auth.getSession();
   session = data.session;
   render();
@@ -250,12 +375,25 @@ function renderConfigError() {
     <main class="layout">
       <header class="topbar">
         <div>
-          <h1>Praetor SaaS</h1>
-          <p class="subtitle">Configuration required</p>
+          <h1>Praetor</h1>
+          <p class="subtitle">Authentication not configured</p>
         </div>
       </header>
       <section class="glass-panel">
-        <p class="card-hint">Supabase is not configured. Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in <code>packages/dashboard/.env</code> and restart the dev server.</p>
+        <p>This dashboard fails closed when no auth backend is configured. Pick one:</p>
+        <p class="card-hint">
+          <strong>Production:</strong> set <code>VITE_SUPABASE_URL</code> and
+          <code>VITE_SUPABASE_ANON_KEY</code> in <code>packages/dashboard/.env</code>.
+          The API server must run with the matching <code>SUPABASE_URL</code> +
+          <code>SUPABASE_SERVICE_ROLE_KEY</code> pair.
+        </p>
+        <p class="card-hint">
+          <strong>Local dev:</strong> set <code>VITE_PRAETOR_DEV_MODE=1</code> in
+          <code>packages/dashboard/.env</code> AND <code>PRAETOR_DEV_MODE=1</code>
+          in the API server's environment. Any email + password combo will sign
+          in with a deterministic <code>dev-user</code>.
+        </p>
+        <p class="card-hint">Restart <code>vite</code> after editing <code>.env</code>.</p>
       </section>
     </main>
   `;
@@ -497,38 +635,87 @@ function renderChat() {
   });
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const goal = input?.value.trim() ?? "";
-    if (!goal) return;
+    const text = input?.value.trim() ?? "";
+    if (!text) return;
     if (submitBtn) submitBtn.disabled = true;
-    chatLog.push({ id: cryptoId(), role: "user", content: goal });
     if (input) input.value = "";
-    refreshChat();
     try {
-      const res = await authedFetch("/api/v1/missions", {
-        method: "POST",
-        body: JSON.stringify({ goal, agent: selectedAgent }),
-      });
-      const payload = await res.json();
-      if (!res.ok || !payload.missionId) {
-        chatLog.push({ id: cryptoId(), role: "system", content: `Failed to start: ${payload.error ?? res.statusText}` });
+      // If a mission is in-flight, treat the input as a follow-up message
+      // (the "talk back" surface). Otherwise spawn a new mission.
+      if (activityMissionId && isMissionLive(activityMissionId)) {
+        await sendChatMessage(activityMissionId, text);
       } else {
-        const placeholder: ChatMessage = {
-          id: cryptoId(),
-          role: "praetor",
-          content: "Mission queued. Streaming logs…",
-          missionId: payload.missionId,
-          status: "queued",
-        };
-        chatLog.push(placeholder);
-        watchMission(placeholder.id, payload.missionId);
-        attachActivity(payload.missionId);
+        chatLog.push({ id: cryptoId(), role: "user", content: text });
+        refreshChat();
+        const res = await authedFetch("/api/v1/missions", {
+          method: "POST",
+          body: JSON.stringify({ goal: text, agent: selectedAgent }),
+        });
+        const payload = await res.json();
+        if (!res.ok || !payload.missionId) {
+          chatLog.push({ id: cryptoId(), role: "system", content: `Failed to start: ${payload.error ?? res.statusText}` });
+        } else {
+          const placeholder: ChatMessage = {
+            id: cryptoId(),
+            role: "praetor",
+            content: "Mission queued. Streaming logs…",
+            missionId: payload.missionId,
+            status: "queued",
+          };
+          chatLog.push(placeholder);
+          watchMission(placeholder.id, payload.missionId);
+          attachActivity(payload.missionId);
+        }
       }
     } catch (err) {
       chatLog.push({ id: cryptoId(), role: "system", content: `Network error: ${(err as Error).message}` });
     }
     refreshChat();
+    refreshComposerState();
     if (submitBtn) submitBtn.disabled = false;
   });
+  refreshComposerState();
+}
+
+/**
+ * Send a follow-up message to an already-running mission. Persists on the
+ * server as a chat.user activity event; the SSE stream echoes it back into
+ * the activity panel so we don't duplicate it locally here.
+ */
+async function sendChatMessage(missionId: string, text: string): Promise<void> {
+  const res = await authedFetch(`/api/v1/missions/${encodeURIComponent(missionId)}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ text, role: "user" }),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    chatLog.push({
+      id: cryptoId(),
+      role: "system",
+      content: `Failed to send message: ${(payload as { error?: string }).error ?? res.statusText}`,
+    });
+  }
+}
+
+/** True iff the most recent mission with this id is queued or running. */
+function isMissionLive(missionId: string): boolean {
+  const msg = [...chatLog].reverse().find((m) => m.missionId === missionId);
+  if (!msg) return false;
+  return msg.status === "queued" || msg.status === "running";
+}
+
+/** Toggle the composer between "Run mission" and "Send message" modes. */
+function refreshComposerState(): void {
+  const submit = document.getElementById("chatSubmit") as HTMLButtonElement | null;
+  const input = document.getElementById("chatInput") as HTMLTextAreaElement | null;
+  if (!submit) return;
+  const live = !!(activityMissionId && isMissionLive(activityMissionId));
+  submit.textContent = live ? "Send message" : "Run mission";
+  if (input) {
+    input.placeholder = live
+      ? "Talk back to the running mission — it will be queued for the agent loop"
+      : "Tell Praetor what to do — e.g. 'Generate an SEO audit for example.com and email it to me'";
+  }
 }
 
 /** Subscribe the activity panel to a mission: hydrate from history then open SSE. */
@@ -606,6 +793,7 @@ function watchMission(messageId: string, missionId: string) {
         ? "```\n" + tail + "\n```"
         : "Mission queued. Waiting for first output…";
       refreshChat();
+      refreshComposerState();
       if (payload.mission.status === "completed" || payload.mission.status === "failed") {
         stopMissionPoller(missionId);
       }

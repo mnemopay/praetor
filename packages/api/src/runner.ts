@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, appendFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -8,6 +8,40 @@ import { env } from "./env.js";
 import { appendMissionLog, updateMissionStatus } from "./db.js";
 import type { ActivityEvent, Charter } from "@praetor/core";
 import { getActivityBus } from "./activity.js";
+
+/**
+ * Per-mission inbox path. Messages from the dashboard's "talk back" surface
+ * are appended here as JSON-lines so a future hook on the running CLI can
+ * ingest them between agent loop iterations. Today the inbox is a record-
+ * only artifact — agent-loop ingestion is a follow-up task.
+ */
+export function missionInboxPath(missionId: string): string {
+  return resolve(env.repoRoot, ".praetor", `inbox-${missionId}.jsonl`);
+}
+
+/**
+ * Append a chat message to the per-mission inbox + publish a chat activity
+ * event onto the bus so the dashboard re-renders the conversation. Returns
+ * the canonical event so callers can echo the messageId back to the client.
+ */
+export async function recordMissionChatMessage(input: {
+  missionId: string;
+  text: string;
+  role: "user" | "assistant";
+}): Promise<{ event: ActivityEvent; inboxPath: string }> {
+  const missionDir = resolve(env.repoRoot, ".praetor");
+  await mkdir(missionDir, { recursive: true });
+  const inboxPath = missionInboxPath(input.missionId);
+  const messageId = randomUUID();
+  const ts = new Date().toISOString();
+  const event: ActivityEvent =
+    input.role === "user"
+      ? { kind: "chat.user", missionId: input.missionId, messageId, text: input.text, ts }
+      : { kind: "chat.assistant", missionId: input.missionId, messageId, text: input.text, ts };
+  await appendFile(inboxPath, JSON.stringify(event) + "\n", "utf-8");
+  getActivityBus().publish(event);
+  return { event, inboxPath };
+}
 
 export const activeMissionPids = new Map<string, number>();
 const ACTIVITY_PREFIX = "::praetor-activity::";

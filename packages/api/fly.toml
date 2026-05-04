@@ -1,0 +1,59 @@
+# Praetor API — Fly.io deploy config.
+#
+#   cd packages/api
+#   fly launch --no-deploy --copy-config   # first time only — creates app
+#   fly secrets set \
+#     SUPABASE_URL=… \
+#     SUPABASE_SERVICE_ROLE_KEY=… \
+#     ANTHROPIC_API_KEY=…
+#   fly deploy --remote-only --dockerfile ../../Dockerfile
+#
+# Deploy story:
+#   - The image is built from the repo-root Dockerfile (multi-stage).
+#   - This config pins the app name + region + scaling profile.
+#   - HTTPS is auto-terminated by Fly; the api listens on 8788 internally.
+
+app = "praetor-api"
+primary_region = "dfw"
+
+[build]
+  # The Dockerfile is at the repo root, not next to fly.toml. Run fly
+  # deploy from packages/api with --dockerfile ../../Dockerfile so the
+  # build context is the whole monorepo (the Dockerfile copies workspace
+  # packages it can't see otherwise).
+
+[env]
+  PORT = "8788"
+  HOST = "0.0.0.0"
+  NODE_ENV = "production"
+  PRAETOR_REPO_ROOT = "/app"
+
+[http_service]
+  internal_port = 8788
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 100
+    hard_limit = 200
+
+[[http_service.checks]]
+  grace_period = "15s"
+  interval = "30s"
+  method = "GET"
+  timeout = "5s"
+  path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[mounts]
+  source = "praetor_data"
+  destination = "/app/.praetor"

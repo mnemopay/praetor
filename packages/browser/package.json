@@ -1,0 +1,55 @@
+{
+  "name": "@praetor/browser",
+  "version": "0.1.0",
+  "description": "Praetor-native browser agent runtime. DOM-first via Chrome DevTools Protocol (lazy playwright-core peer). Stagehand-shaped natural-language act() over CDP. Vision fallback via PraetorScreen for canvas / anti-bot pages.",
+  "keywords": [
+    "browser",
+    "agent",
+    "playwright",
+    "cdp",
+    "praetor"
+  ],
+  "homepage": "https://praetor.mnemopay.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mnemopay/praetor.git",
+    "directory": "packages/browser"
+  },
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
+  "dependencies": {
+    "@praetor/core": "*",
+    "@praetor/tools": "*",
+    "@praetor/vision": "*"
+  },
+  "peerDependenciesMeta": {
+    "playwright-core": {
+      "optional": true
+    }
+  }
+}

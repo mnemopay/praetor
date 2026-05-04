@@ -21,7 +21,8 @@ export type RendererTarget =
   | "spark-splat"
   | "godot-scene"
   | "email-html"
-  | "markdown";
+  | "markdown"
+  | "claude-skill";
 
 /** A single emitted file. Renderers return one or more of these. */
 export interface DesignFile {

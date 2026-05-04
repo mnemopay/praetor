@@ -11,7 +11,9 @@ export type ActivityEvent =
   | { kind: "tool.progress"; missionId: string; eventId: string; pct?: number; status: string; ts: string }
   | { kind: "tool.end"; missionId: string; eventId: string; ok: boolean; result?: unknown; costUsd?: number; ts: string }
   | { kind: "artifact.partial"; missionId: string; artifactId: string; format: "text" | "glb" | "splat" | "image"; chunk: string; ts: string }
-  | { kind: "artifact.done"; missionId: string; artifactId: string; format?: "text" | "glb" | "splat" | "image"; url: string; ts: string };
+  | { kind: "artifact.done"; missionId: string; artifactId: string; format?: "text" | "glb" | "splat" | "image"; url: string; ts: string }
+  | { kind: "chat.user"; missionId: string; messageId: string; text: string; ts: string }
+  | { kind: "chat.assistant"; missionId: string; messageId: string; text: string; ts: string };
 
 interface ToolRow {
   eventId: string;
@@ -33,13 +35,26 @@ interface ArtifactRow {
   doneAt?: string;
 }
 
+interface ChatRow {
+  messageId: string;
+  role: "user" | "assistant";
+  text: string;
+  ts: string;
+}
+
+type RowRef =
+  | { kind: "milestone"; index: number }
+  | { kind: "tool"; eventId: string }
+  | { kind: "artifact"; artifactId: string }
+  | { kind: "chat"; messageId: string };
+
 export class ActivityPanel {
   private host: HTMLElement;
   private milestones: { ts: string; text: string }[] = [];
   private tools = new Map<string, ToolRow>();
-  private toolOrder: string[] = [];
   private artifacts = new Map<string, ArtifactRow>();
-  private artifactOrder: string[] = [];
+  private chats = new Map<string, ChatRow>();
+  private order: RowRef[] = [];
 
   constructor(host: HTMLElement) {
     this.host = host;
@@ -50,9 +65,9 @@ export class ActivityPanel {
   reset(): void {
     this.milestones = [];
     this.tools.clear();
-    this.toolOrder = [];
     this.artifacts.clear();
-    this.artifactOrder = [];
+    this.chats.clear();
+    this.order = [];
     this.render();
   }
 
@@ -70,11 +85,14 @@ export class ActivityPanel {
 
   private ingestSilently(e: ActivityEvent): void {
     switch (e.kind) {
-      case "milestone":
+      case "milestone": {
+        const index = this.milestones.length;
         this.milestones.push({ ts: e.ts, text: e.text });
+        this.order.push({ kind: "milestone", index });
         break;
+      }
       case "tool.start":
-        if (!this.tools.has(e.eventId)) this.toolOrder.push(e.eventId);
+        if (!this.tools.has(e.eventId)) this.order.push({ kind: "tool", eventId: e.eventId });
         this.tools.set(e.eventId, {
           eventId: e.eventId,
           toolName: e.toolName,
@@ -101,7 +119,7 @@ export class ActivityPanel {
       }
       case "artifact.partial": {
         if (!this.artifacts.has(e.artifactId)) {
-          this.artifactOrder.push(e.artifactId);
+          this.order.push({ kind: "artifact", artifactId: e.artifactId });
           this.artifacts.set(e.artifactId, { artifactId: e.artifactId, format: e.format, partials: [] });
         }
         this.artifacts.get(e.artifactId)!.partials.push(e.chunk);
@@ -109,7 +127,7 @@ export class ActivityPanel {
       }
       case "artifact.done": {
         if (!this.artifacts.has(e.artifactId)) {
-          this.artifactOrder.push(e.artifactId);
+          this.order.push({ kind: "artifact", artifactId: e.artifactId });
           this.artifacts.set(e.artifactId, { artifactId: e.artifactId, format: e.format ?? "text", partials: [] });
         }
         const a = this.artifacts.get(e.artifactId)!;
@@ -118,61 +136,84 @@ export class ActivityPanel {
         a.doneAt = e.ts;
         break;
       }
+      case "chat.user":
+      case "chat.assistant": {
+        if (!this.chats.has(e.messageId)) this.order.push({ kind: "chat", messageId: e.messageId });
+        this.chats.set(e.messageId, {
+          messageId: e.messageId,
+          role: e.kind === "chat.user" ? "user" : "assistant",
+          text: e.text,
+          ts: e.ts,
+        });
+        break;
+      }
     }
   }
 
   private render(): void {
     if (!this.host) return;
     const rows: string[] = [];
-    for (const ev of this.milestones) {
-      rows.push(`<div class="activity-row activity-milestone">
-        <span class="activity-time">${shortTime(ev.ts)}</span>
-        <span class="activity-text">${escapeHtml(ev.text)}</span>
-      </div>`);
-    }
-    for (const id of this.toolOrder) {
-      const t = this.tools.get(id);
-      if (!t) continue;
-      const pill = t.endedAt
-        ? (t.ok ? `<span class="status-pill ok">done</span>` : `<span class="status-pill err">failed</span>`)
-        : `<span class="status-pill warn">running…</span>`;
-      const cost = typeof t.costUsd === "number" ? ` · $${t.costUsd.toFixed(3)}` : "";
-      const status = t.status ? ` · ${escapeHtml(t.status)}` : "";
-      const pct = typeof t.pct === "number" ? ` · ${Math.round(t.pct)}%` : "";
-      rows.push(`<div class="activity-row activity-tool">
-        <div class="activity-row-head">
-          <span class="activity-time">${shortTime(t.startedAt)}</span>
-          <span class="activity-tool-name">${escapeHtml(t.toolName)}</span>
-          ${pill}
-        </div>
-        <div class="activity-row-body">${escapeHtml(`${status}${pct}${cost}`)}</div>
-      </div>`);
-    }
-    for (const id of this.artifactOrder) {
-      const a = this.artifacts.get(id);
-      if (!a) continue;
-      let preview = "";
-      const url = artifactUrl(a.url);
-      if (url && (a.format === "glb")) {
-        preview = `<a class="btn-secondary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open GLB</a>`;
-      } else if (url && a.format === "splat") {
-        preview = `<a class="btn-secondary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open splat</a>`;
-      } else if (url && a.format === "image") {
-        preview = `<img class="activity-artifact-img" src="${escapeAttr(url)}" alt="${escapeAttr(a.artifactId)}" />`;
-      } else if (url && a.format === "text") {
-        preview = `<a class="btn-secondary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open artifact</a>`;
-      } else if (a.partials.length > 0 || a.url) {
-        const text = a.partials.join("");
-        preview = `<pre class="activity-artifact-text">${escapeHtml(text)}</pre>`;
+    for (const ref of this.order) {
+      if (ref.kind === "milestone") {
+        const m = this.milestones[ref.index];
+        if (!m) continue;
+        rows.push(`<div class="activity-row activity-milestone">
+          <span class="activity-time">${shortTime(m.ts)}</span>
+          <span class="activity-text">${escapeHtml(m.text)}</span>
+        </div>`);
+      } else if (ref.kind === "tool") {
+        const t = this.tools.get(ref.eventId);
+        if (!t) continue;
+        const pill = t.endedAt
+          ? (t.ok ? `<span class="status-pill ok">done</span>` : `<span class="status-pill err">failed</span>`)
+          : `<span class="status-pill warn">running…</span>`;
+        const cost = typeof t.costUsd === "number" ? ` · $${t.costUsd.toFixed(3)}` : "";
+        const status = t.status ? ` · ${escapeHtml(t.status)}` : "";
+        const pct = typeof t.pct === "number" ? ` · ${Math.round(t.pct)}%` : "";
+        rows.push(`<div class="activity-row activity-tool">
+          <div class="activity-row-head">
+            <span class="activity-time">${shortTime(t.startedAt)}</span>
+            <span class="activity-tool-name">${escapeHtml(t.toolName)}</span>
+            ${pill}
+          </div>
+          <div class="activity-row-body">${escapeHtml(`${status}${pct}${cost}`)}</div>
+        </div>`);
+      } else if (ref.kind === "artifact") {
+        const a = this.artifacts.get(ref.artifactId);
+        if (!a) continue;
+        let preview = "";
+        const url = artifactUrl(a.url);
+        if (url && (a.format === "glb")) {
+          preview = `<a class="btn-secondary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open GLB</a>`;
+        } else if (url && a.format === "splat") {
+          preview = `<a class="btn-secondary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open splat</a>`;
+        } else if (url && a.format === "image") {
+          preview = `<img class="activity-artifact-img" src="${escapeAttr(url)}" alt="${escapeAttr(a.artifactId)}" />`;
+        } else if (url && a.format === "text") {
+          preview = `<a class="btn-secondary" href="${escapeAttr(url)}" target="_blank" rel="noopener">Open artifact</a>`;
+        } else if (a.partials.length > 0 || a.url) {
+          const text = a.partials.join("");
+          preview = `<pre class="activity-artifact-text">${escapeHtml(text)}</pre>`;
+        }
+        rows.push(`<div class="activity-row activity-artifact">
+          <div class="activity-row-head">
+            <span class="activity-time">${shortTime(a.doneAt ?? "")}</span>
+            <span class="activity-tool-name">artifact · ${escapeHtml(a.format)}</span>
+            ${a.url ? `<span class="status-pill ok">done</span>` : `<span class="status-pill warn">streaming…</span>`}
+          </div>
+          <div class="activity-row-body">${preview}</div>
+        </div>`);
+      } else if (ref.kind === "chat") {
+        const c = this.chats.get(ref.messageId);
+        if (!c) continue;
+        rows.push(`<div class="activity-row activity-chat activity-chat-${c.role}">
+          <div class="activity-row-head">
+            <span class="activity-time">${shortTime(c.ts)}</span>
+            <span class="activity-tool-name">${c.role === "user" ? "you" : "praetor"}</span>
+          </div>
+          <div class="activity-row-body activity-chat-body">${escapeHtml(c.text)}</div>
+        </div>`);
       }
-      rows.push(`<div class="activity-row activity-artifact">
-        <div class="activity-row-head">
-          <span class="activity-time">${shortTime(a.doneAt ?? "")}</span>
-          <span class="activity-tool-name">artifact · ${escapeHtml(a.format)}</span>
-          ${a.url ? `<span class="status-pill ok">done</span>` : `<span class="status-pill warn">streaming…</span>`}
-        </div>
-        <div class="activity-row-body">${preview}</div>
-      </div>`);
     }
 
     if (rows.length === 0) {

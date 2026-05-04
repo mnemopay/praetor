@@ -28,6 +28,16 @@ export interface ChatRequest {
   temperature?: number;
   maxTokens?: number;
   tools?: { type: "function"; function: { name: string; description?: string; parameters?: Record<string, unknown> } }[];
+  /**
+   * Enable provider-side prompt caching when the request has a stable
+   * prefix (system prompt + tool definitions repeated across many turns).
+   * Anthropic: emits `cache_control: { type: "ephemeral" }` on system +
+   * last tool block. OpenAI: caching is automatic on stable prefixes ≥1024
+   * tokens; this flag is a no-op there but the cost calc still discounts
+   * cached tokens reported in `usage.prompt_tokens_details.cached_tokens`.
+   * Default: false (preserves existing semantics).
+   */
+  cache?: boolean;
 }
 
 export interface ChatResponse {
@@ -36,6 +46,10 @@ export interface ChatResponse {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /** Tokens served from the provider-side prompt cache (read at 0.1× rate). */
+  cachedInputTokens?: number;
+  /** Tokens written to the prompt cache on this call (Anthropic charges 1.25× for writes). */
+  cacheWriteTokens?: number;
   costUsd: number;
 }
 
@@ -186,6 +200,43 @@ export class LlmRouter {
 }
 
 export * from "./providers.js";
+
+import { submitAnthropicBatch, getAnthropicBatch, type BatchPollResult, type BatchSubmitResult } from "./providers.js";
+
+/**
+ * Submit a batch of requests to whichever provider supports batch APIs.
+ * Today: Anthropic. The router picks the model per item via `pick(route)`,
+ * then delegates to the provider's batch endpoint. 50% discount applied
+ * by the polling helper when results land.
+ *
+ * Use this for charters tagged `async: true` — bulk summarization, fan-out
+ * research, overnight extraction. NOT for the agent's hot loop (results
+ * take minutes).
+ */
+export async function submitBatch(
+  router: LlmRouter,
+  apiKey: string,
+  items: { customId: string; route: RouteRequirements; request: ChatRequest }[],
+  opts: { baseUrl?: string; fetchImpl?: typeof fetch } = {},
+): Promise<BatchSubmitResult> {
+  const resolved = items.map((item) => {
+    const card = router.pick(item.route);
+    if (card.provider !== "anthropic") {
+      throw new Error(`submitBatch: only anthropic batch supported today; routed item '${item.customId}' to '${card.provider}'`);
+    }
+    return { customId: item.customId, modelId: card.id, request: item.request };
+  });
+  return submitAnthropicBatch(apiKey, resolved, opts);
+}
+
+/** Poll a previously-submitted batch. See `submitBatch`. */
+export function pollBatch(
+  apiKey: string,
+  batchId: string,
+  opts: { baseUrl?: string; fetchImpl?: typeof fetch; catalogue?: ModelCard[] } = {},
+): Promise<BatchPollResult> {
+  return getAnthropicBatch(apiKey, batchId, opts);
+}
 
 /* ─────────── Mock provider for tests ─────────── */
 

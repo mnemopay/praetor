@@ -1,126 +1,54 @@
-import type { MissionRecord } from "./types.js";
-import type { ActivityEvent } from "@praetor/core";
-import { supabaseAdmin } from "./supabase.js";
+/**
+ * Database dispatcher — public surface for all db operations in the API.
+ *
+ * Selects the backend at module load time based on PRAETOR_DEV_MODE:
+ *   - PRAETOR_DEV_MODE=1  → db-memory.ts  (in-process Maps, no infra needed)
+ *   - (default)           → db-supabase.ts (Praetor-native store / real Supabase)
+ *
+ * The 11 exported function names and signatures are identical in both adapters
+ * and must stay that way — every other file in the api package imports from
+ * "./db.js" and we never want to touch those import sites.
+ *
+ * Adding a new db function: add it to both db-memory.ts and db-supabase.ts
+ * first, then forward it here.
+ */
 
-export async function createMissionRow(input: {
-  id: string;
-  userId: string;
-  goal: string;
-  budget: number;
-  charterJson: Record<string, unknown>;
-}): Promise<MissionRecord> {
-  const { data, error } = await supabaseAdmin()
-    .from("missions")
-    .insert({
-      id: input.id,
-      user_id: input.userId,
-      status: "queued",
-      goal: input.goal,
-      budget: input.budget,
-      charter_json: input.charterJson,
-    })
-    .select("*")
-    .single();
-  if (error) throw error;
-  return data as MissionRecord;
-}
+import { DEV_MODE } from "./env.js";
+import * as memory from "./db-memory.js";
+import * as supabase from "./db-supabase.js";
 
-export async function updateMissionStatus(id: string, status: MissionRecord["status"]): Promise<void> {
-  const { error } = await supabaseAdmin().from("missions").update({ status }).eq("id", id);
-  if (error) throw error;
-}
+// Cache once at module load so every call is a single property lookup.
+const impl = DEV_MODE ? memory : supabase;
 
-export async function appendMissionLog(missionId: string, line: string): Promise<void> {
-  const trimmed = line.trim();
-  if (!trimmed) return;
-  const { error } = await supabaseAdmin().from("mission_logs").insert({ mission_id: missionId, line: trimmed });
-  if (error) throw error;
-}
+export const createMissionRow: typeof memory.createMissionRow =
+  (input) => impl.createMissionRow(input);
 
-export async function listMissions(userId: string): Promise<MissionRecord[]> {
-  const { data, error } = await supabaseAdmin()
-    .from("missions")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(100);
-  if (error) throw error;
-  return (data ?? []) as MissionRecord[];
-}
+export const updateMissionStatus: typeof memory.updateMissionStatus =
+  (id, status) => impl.updateMissionStatus(id, status);
 
-export async function getMissionForUser(missionId: string, userId: string): Promise<MissionRecord | null> {
-  const { data, error } = await supabaseAdmin()
-    .from("missions")
-    .select("*")
-    .eq("id", missionId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error) throw error;
-  return (data as MissionRecord | null) ?? null;
-}
+export const appendMissionLog: typeof memory.appendMissionLog =
+  (missionId, line) => impl.appendMissionLog(missionId, line);
 
-export async function getMissionLogs(missionId: string): Promise<string[]> {
-  const { data, error } = await supabaseAdmin()
-    .from("mission_logs")
-    .select("line")
-    .eq("mission_id", missionId)
-    .order("created_at", { ascending: true });
-  if (error) throw error;
-  return ((data ?? []) as Array<{ line: string }>).map((row) => String(row.line));
-}
+export const listMissions: typeof memory.listMissions =
+  (userId) => impl.listMissions(userId);
 
-export async function listInstalledPlugins(userId: string): Promise<string[]> {
-  const { data, error } = await supabaseAdmin()
-    .from("plugin_installs")
-    .select("plugin_name")
-    .eq("user_id", userId)
-    .order("installed_at", { ascending: true });
-  if (error) throw error;
-  return ((data ?? []) as Array<{ plugin_name: string }>).map((row) => String(row.plugin_name));
-}
+export const getMissionForUser: typeof memory.getMissionForUser =
+  (missionId, userId) => impl.getMissionForUser(missionId, userId);
 
-export async function installPlugin(userId: string, pluginName: string): Promise<void> {
-  const { error } = await supabaseAdmin().from("plugin_installs").insert({ user_id: userId, plugin_name: pluginName });
-  if (error && error.code !== "23505") throw error;
-}
+export const getMissionLogs: typeof memory.getMissionLogs =
+  (missionId) => impl.getMissionLogs(missionId);
 
-/* ─── Activity events (Phase E) ───────────────────────────────────────── */
+export const listInstalledPlugins: typeof memory.listInstalledPlugins =
+  (userId) => impl.listInstalledPlugins(userId);
 
-export async function recordActivityEvent(userId: string, e: ActivityEvent): Promise<void> {
-  const row = {
-    user_id: userId,
-    mission_id: e.missionId,
-    kind: e.kind,
-    payload: e as unknown as Record<string, unknown>,
-    ts: e.ts,
-  };
-  const { error } = await supabaseAdmin().from("activity_events").insert(row);
-  if (error) throw error;
-}
+export const installPlugin: typeof memory.installPlugin =
+  (userId, pluginName) => impl.installPlugin(userId, pluginName);
 
-export async function getRecentActivity(
-  userId: string,
-  missionId: string,
-  limit = 50,
-): Promise<ActivityEvent[]> {
-  const { data, error } = await supabaseAdmin()
-    .from("activity_events")
-    .select("payload")
-    .eq("user_id", userId)
-    .eq("mission_id", missionId)
-    .order("ts", { ascending: true })
-    .limit(limit);
-  if (error) throw error;
-  return ((data ?? []) as Array<{ payload: ActivityEvent }>).map((row) => row.payload);
-}
+export const recordActivityEvent: typeof memory.recordActivityEvent =
+  (userId, e) => impl.recordActivityEvent(userId, e);
 
-/** Resolve mission owner; used by the activity bus persistence subscriber. */
-export async function getMissionOwner(missionId: string): Promise<string | null> {
-  const { data, error } = await supabaseAdmin()
-    .from("missions")
-    .select("user_id")
-    .eq("id", missionId)
-    .maybeSingle();
-  if (error) return null;
-  return (data as { user_id?: string } | null)?.user_id ?? null;
-}
+export const getRecentActivity: typeof memory.getRecentActivity =
+  (userId, missionId, limit) => impl.getRecentActivity(userId, missionId, limit);
+
+export const getMissionOwner: typeof memory.getMissionOwner =
+  (missionId) => impl.getMissionOwner(missionId);

@@ -26,6 +26,8 @@ import type { PolicyEngine } from "@praetor/core";
 import { registerFileTools } from "./tools/file_tools.js";
 import { registerGitTools } from "./tools/git_tools.js";
 import { registerTestTools } from "./tools/test_tools.js";
+import { registerRepoMapTools } from "./tools/repo_map.js";
+import { registerConventionsTool } from "./tools/conventions.js";
 
 export interface CodingAgentOptions {
   repoRoot: string;
@@ -59,6 +61,8 @@ export function registerCodingTools(reg: ToolRegistry, repoRoot: string): void {
   registerFileTools(reg, { repoRoot });
   registerGitTools(reg, { repoRoot });
   registerTestTools(reg, { repoRoot });
+  registerRepoMapTools(reg, { repoRoot });
+  registerConventionsTool(reg, { repoRoot });
 }
 
 export class CodingAgent {
@@ -87,3 +91,7 @@ export class CodingAgent {
 export { registerFileTools } from "./tools/file_tools.js";
 export { registerGitTools } from "./tools/git_tools.js";
 export { registerTestTools } from "./tools/test_tools.js";
+export { registerRepoMapTools, extractSymbols } from "./tools/repo_map.js";
+export { registerConventionsTool } from "./tools/conventions.js";
+export { createActivityToolContext } from "./activity_context.js";
+export type { CreateActivityToolContextInput } from "./activity_context.js";

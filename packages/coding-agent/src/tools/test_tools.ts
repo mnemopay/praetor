@@ -16,6 +16,15 @@ export interface TestToolsOptions {
   repoRoot: string;
   /** Override the default 30-second timeout (ms). */
   timeoutMs?: number;
+  /**
+   * Replace the default `run_command` allowlist entirely. Use sparingly —
+   * the default already covers the common JS/Python/Go/Rust toolchains plus
+   * basic POSIX utilities. Pass `extraAllow` instead when you only want to
+   * add to the defaults.
+   */
+  allowList?: readonly string[];
+  /** Append additional commands to the default allowlist. */
+  extraAllow?: readonly string[];
 }
 
 interface CommandResult {
@@ -57,7 +66,20 @@ export function registerTestTools(reg: ToolRegistry, opts: TestToolsOptions): vo
     },
   );
 
-  const allowlist = ["npm", "npx", "node", "tsc", "vitest", "git", "cargo", "pytest", "go", "ls", "pwd", "echo", "cat"];
+  const defaultAllowList: readonly string[] = [
+    // JS/TS toolchains
+    "npm", "npx", "node", "tsc", "vitest", "pnpm", "yarn", "bun", "deno",
+    // Python
+    "python", "python3", "pip", "pip3", "pytest", "uv", "poetry",
+    // Other languages
+    "cargo", "rustc", "go",
+    // Build / packaging
+    "make",
+    // Repo / utility
+    "git", "ls", "pwd", "echo", "cat", "mkdir", "which", "where", "find", "head", "tail",
+  ];
+  const allowlist = (opts.allowList ? [...opts.allowList] : [...defaultAllowList]);
+  if (opts.extraAllow) for (const a of opts.extraAllow) if (!allowlist.includes(a)) allowlist.push(a);
   reg.register<{ command: string; args?: string[] }, CommandResult>(
     {
       name: "run_command",
@@ -89,9 +111,43 @@ function detectTestCommand(root: string): { cmd: string; args: string[] } | null
   return null;
 }
 
+// Windows resolves these commands via .cmd / .ps1 shim files rather than
+// direct .exe binaries. Without `shell: true`, Node's spawn calls
+// CreateProcess directly and ENOENTs. We opt these specific names into
+// shell-mode resolution; native executables like node/python/git stay on
+// the default codepath so child.kill() can tree-kill them on timeout.
+const WINDOWS_SHIMS = new Set([
+  "npm", "npx", "pnpm", "yarn", "bun",
+  "tsc", "vitest", "tsx",
+  "pip", "pip3", "pytest", "uv", "poetry",
+  "cargo", "deno", "rustc", "go",
+]);
+
+/**
+ * When `shell: true` is in effect, args are concatenated by the shell, not
+ * escaped — so an arg like `;rm -rf /` would actually run. Refuse args
+ * containing shell metacharacters in shell-mode. Direct-spawn paths (the
+ * default) don't need this because args are passed individually to
+ * CreateProcess / posix_spawn without a shell intermediary.
+ */
+function rejectShellInjection(args: string[]): void {
+  // Node's `shell: true` on Windows invokes cmd.exe; on POSIX it invokes
+  // /bin/sh. Both interpret these as command separators / redirection /
+  // chaining. Narrow set to keep legit args (parentheses, dots, dashes)
+  // working while blocking the obvious injection vectors.
+  for (const a of args) {
+    if (typeof a !== "string") continue;
+    if (/[&|<>`^]/.test(a) || /\$\(/.test(a)) {
+      throw new Error(`run_command: argument contains shell metacharacter, refused for shell-mode spawn: ${a}`);
+    }
+  }
+}
+
 function runCommand(cmd: string, args: string[], cwd: string, timeoutMs: number): Promise<CommandResult> {
   return new Promise((resolveFn) => {
-    const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const useShell = process.platform === "win32" && WINDOWS_SHIMS.has(cmd);
+    if (useShell) rejectShellInjection(args);
+    const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"], shell: useShell, windowsHide: true });
     let stdout = "";
     let stderr = "";
     let timedOut = false;

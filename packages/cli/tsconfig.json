@@ -6,6 +6,7 @@
     { "path": "../core" },
     { "path": "../payments" },
     { "path": "../agents" },
+    { "path": "../coding-agent" },
     { "path": "../scrape" },
     { "path": "../knowledge" },
     { "path": "../router" },
@@ -17,6 +18,8 @@
     { "path": "../tools" },
     { "path": "../sandbox" },
     { "path": "../vision" },
+    { "path": "../voice" },
+    { "path": "../browser" },
     { "path": "../social" },
     { "path": "../world-gen" }
   ]

@@ -12,7 +12,9 @@ export type ActivityEvent =
   | { kind: "tool.progress"; missionId: string; eventId: string; pct?: number; status: string; ts: string }
   | { kind: "tool.end"; missionId: string; eventId: string; ok: boolean; result?: unknown; costUsd?: number; ts: string }
   | { kind: "artifact.partial"; missionId: string; artifactId: string; format: ArtifactFormat; chunk: string; ts: string }
-  | { kind: "artifact.done"; missionId: string; artifactId: string; format?: ArtifactFormat; url: string; ts: string };
+  | { kind: "artifact.done"; missionId: string; artifactId: string; format?: ArtifactFormat; url: string; ts: string }
+  | { kind: "chat.user"; missionId: string; messageId: string; text: string; ts: string }
+  | { kind: "chat.assistant"; missionId: string; messageId: string; text: string; ts: string };
 
 export interface ActivityBus {
   publish(e: ActivityEvent): void;

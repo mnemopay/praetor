@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { ToolRegistry, type ToolDefinition } from "@praetor/tools";
+import { applyUnifiedDiff } from "./unified_diff.js";
 
 /**
  * File tools — read_file, write_file, edit_file, list_files, grep_codebase.
@@ -79,11 +80,10 @@ export function registerFileTools(reg: ToolRegistry, opts: FileToolsOptions): vo
     async ({ path, patch }) => {
       const abs = safe(path);
       const before = await fs.readFile(abs, "utf8");
-      
-      const { applyPatch } = await import("diff");
-      const after = applyPatch(before, patch);
-      if (!after) {
-        throw new Error("Failed to apply patch. Check format or context lines.");
+
+      const after = applyUnifiedDiff(before, patch);
+      if (after === null) {
+        throw new Error("Failed to apply patch. Check format or context lines. Prefer apply_edit (oldString/newString) when context may have drifted.");
       }
 
       // Rollback bundle
@@ -91,10 +91,74 @@ export function registerFileTools(reg: ToolRegistry, opts: FileToolsOptions): vo
       const rollbackPath = resolve(join(root, ".praetor", "rollbacks", `${rollbackId}.orig`));
       await fs.mkdir(resolve(rollbackPath, ".."), { recursive: true });
       await fs.writeFile(rollbackPath, before, "utf8");
-      
+
       await fs.writeFile(abs, after, "utf8");
-      
+
       return { path: relative(root, abs), success: true, rollbackId, diffPreview: patch };
+    },
+  );
+
+  reg.register<
+    { path: string; oldString: string; newString: string; expectedOccurrences?: number },
+    { path: string; replaced: number; rollbackId: string }
+  >(
+    {
+      name: "apply_edit",
+      description:
+        "Drift-tolerant edit: replace `oldString` with `newString` in the file. Fails if `oldString` is not found, or if it appears more times than `expectedOccurrences` (default 1). Original saved to .praetor/rollbacks. Prefer this over edit_file when context lines may have shifted.",
+      schema: {
+        type: "object",
+        properties: {
+          path: { type: "string" },
+          oldString: { type: "string" },
+          newString: { type: "string" },
+          expectedOccurrences: { type: "integer", description: "Required match count. Default 1; pass N to replace all when there are N." },
+        },
+        required: ["path", "oldString", "newString"],
+      },
+      tags, allowedRoles,
+      metadata: {
+        origin: "native",
+        capability: "repo_file_apply_edit",
+        risk: ["filesystem"],
+        approval: "on-side-effect",
+        sandbox: "repo",
+        production: "ready",
+        costEffective: true,
+        note: "Praetor-native string-replace edit; drift-tolerant alternative to unified diff.",
+      },
+    },
+    async ({ path, oldString, newString, expectedOccurrences }) => {
+      if (oldString.length === 0) {
+        throw new Error("apply_edit: oldString must be non-empty");
+      }
+      if (oldString === newString) {
+        throw new Error("apply_edit: oldString equals newString — nothing to do");
+      }
+      const abs = safe(path);
+      const before = await fs.readFile(abs, "utf8");
+
+      const required = typeof expectedOccurrences === "number" ? expectedOccurrences : 1;
+      const found = countOccurrences(before, oldString);
+      if (found === 0) {
+        throw new Error(`apply_edit: oldString not found in ${relative(root, abs)}`);
+      }
+      if (found !== required) {
+        throw new Error(
+          `apply_edit: found ${found} occurrences of oldString in ${relative(root, abs)}, expected ${required}. Pass expectedOccurrences=${found} to replace them all, or supply more context to make oldString unique.`,
+        );
+      }
+
+      const after = before.split(oldString).join(newString);
+
+      const rollbackId = `apply_edit_${Date.now()}`;
+      const rollbackPath = resolve(join(root, ".praetor", "rollbacks", `${rollbackId}.orig`));
+      await fs.mkdir(resolve(rollbackPath, ".."), { recursive: true });
+      await fs.writeFile(rollbackPath, before, "utf8");
+
+      await fs.writeFile(abs, after, "utf8");
+
+      return { path: relative(root, abs), replaced: found, rollbackId };
     },
   );
 
@@ -158,6 +222,17 @@ export function registerFileTools(reg: ToolRegistry, opts: FileToolsOptions): vo
   );
 }
 
+function countOccurrences(haystack: string, needle: string): number {
+  if (needle.length === 0) return 0;
+  let count = 0;
+  let idx = 0;
+  while ((idx = haystack.indexOf(needle, idx)) !== -1) {
+    count += 1;
+    idx += needle.length;
+  }
+  return count;
+}
+
 async function walk(dir: string, fn: (path: string) => Promise<void>): Promise<void> {
   let entries: { name: string; isDirectory: () => boolean; isFile: () => boolean }[] = [];
   try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
@@ -175,7 +250,7 @@ async function walk(dir: string, fn: (path: string) => Promise<void>): Promise<v
 
 
 export const FILE_TOOL_NAMES: readonly string[] = [
-  "read_file", "write_file", "edit_file", "list_files", "grep_codebase",
+  "read_file", "write_file", "edit_file", "apply_edit", "list_files", "grep_codebase",
 ] as const;
 
 export type FileToolDef = ToolDefinition;

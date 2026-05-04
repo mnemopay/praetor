@@ -1,0 +1,24 @@
+{
+  "bundleVersion": "praetor-article12/1",
+  "generatedAt": "2026-05-04T07:43:06.170Z",
+  "retentionMonths": 6,
+  "files": [
+    {
+      "path": "mission.json",
+      "sha256": "7ca4274596808a48c31be172a72623fa602b4ec89cd8a7af9528eec0750cff38"
+    },
+    {
+      "path": "events.json",
+      "sha256": "4c0aca87b61b5824e51c41f03f3aab25e68af4e6cc6f5c3b1ecfe69a04bcc67a"
+    },
+    {
+      "path": "events.csv",
+      "sha256": "b02b08339ba8c8a9f5a3c23940b9c7862661dd8b33180d9951ee82366325933d"
+    },
+    {
+      "path": "chain.txt",
+      "sha256": "7a57c038e2501dc264faef12402e5e59f27253f0048f687d134b674ab1dc2e4e"
+    }
+  ],
+  "auditDigest": "16fe945d4f3e2a7da7946dcf7ae7a54c0029ec707fde9fe514c939f2213c2d35"
+}

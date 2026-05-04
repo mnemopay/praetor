@@ -1,0 +1,53 @@
+{
+  "name": "@praetor/voice",
+  "version": "0.1.0",
+  "description": "Praetor-native text-to-speech runtime. Default backend is Kokoro 82M (Apache 2.0, ONNX, lazy-loaded). Azure Speech, Edge TTS, ElevenLabs, OpenAI TTS, fal-tts, OpenVoice v2 cloning available as opt-in adapters.",
+  "keywords": [
+    "tts",
+    "praetor",
+    "kokoro",
+    "azure-speech",
+    "voice"
+  ],
+  "homepage": "https://praetor.mnemopay.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mnemopay/praetor.git",
+    "directory": "packages/voice"
+  },
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
+  "dependencies": {
+    "@praetor/tools": "*"
+  },
+  "peerDependenciesMeta": {
+    "kokoro-js": {
+      "optional": true
+    }
+  }
+}

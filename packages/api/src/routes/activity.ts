@@ -1,10 +1,14 @@
-import type { Router, Request, Response } from "express";
-import express from "express";
 import type { ActivityEvent } from "@praetor/core";
 import type { AuthedRequest } from "../auth.js";
 import { authMiddleware } from "../auth.js";
 import { getActivityBus } from "../activity.js";
 import { getMissionForUser, getRecentActivity } from "../db.js";
+import {
+  praetorRouter,
+  type Handler,
+  type PraetorResponse,
+  type PraetorRouter,
+} from "../http.js";
 import { supabaseAdmin } from "../supabase.js";
 
 /**
@@ -19,14 +23,14 @@ import { supabaseAdmin } from "../supabase.js";
  * passed as a `?token=` query parameter as a documented fallback. Keep
  * this in mind when deploying behind a proxy that logs URLs.
  */
-
-export function createActivityRouter(): Router {
-  const router = express.Router();
+export function createActivityRouter(): PraetorRouter {
+  const router = praetorRouter();
 
   // Per-mission events with backlog and live tail.
-  router.get("/missions/:id/events", queryTokenAuth, authMiddleware, async (req: AuthedRequest, res: Response) => {
-    const missionId = String(req.params.id ?? "");
-    const userId = req.user?.id;
+  router.get("/missions/:id/events", queryTokenAuth, authMiddleware, async (req, res) => {
+    const authedReq = req as AuthedRequest;
+    const missionId = String(authedReq.params.id ?? "");
+    const userId = authedReq.user?.id;
     if (!userId) { res.status(401).end(); return; }
 
     const mission = await getMissionForUser(missionId, userId).catch(() => null);
@@ -55,15 +59,16 @@ export function createActivityRouter(): Router {
       try { res.write(": ping\n\n"); } catch { /* peer gone */ }
     }, 15_000);
 
-    req.on("close", () => {
+    authedReq.on("close", () => {
       clearInterval(ka);
       unsub();
     });
   });
 
   // All-missions live tail for the caller.
-  router.get("/activity/live", queryTokenAuth, authMiddleware, async (req: AuthedRequest, res: Response) => {
-    const userId = req.user?.id;
+  router.get("/activity/live", queryTokenAuth, authMiddleware, async (req, res) => {
+    const authedReq = req as AuthedRequest;
+    const userId = authedReq.user?.id;
     if (!userId) { res.status(401).end(); return; }
 
     setupSseHeaders(res);
@@ -87,7 +92,7 @@ export function createActivityRouter(): Router {
       try { res.write(": ping\n\n"); } catch { /* peer gone */ }
     }, 15_000);
 
-    req.on("close", () => {
+    authedReq.on("close", () => {
       clearInterval(ka);
       unsub();
     });
@@ -97,14 +102,16 @@ export function createActivityRouter(): Router {
 }
 
 /** Promotes a `?token=` query string into an `Authorization: Bearer <token>` header so authMiddleware can run. */
-function queryTokenAuth(req: Request, _res: Response, next: () => void): void {
-  if (!req.headers.authorization && typeof req.query.token === "string" && req.query.token) {
-    (req.headers as Record<string, string>).authorization = `Bearer ${req.query.token}`;
+const queryTokenAuth: Handler = (req, _res, next) => {
+  const token = req.query.token;
+  const tokenStr = Array.isArray(token) ? token[0] : token;
+  if (!req.headers.authorization && tokenStr) {
+    req.headers.authorization = `Bearer ${tokenStr}`;
   }
   next();
-}
+};
 
-function setupSseHeaders(res: Response): void {
+function setupSseHeaders(res: PraetorResponse): void {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
@@ -113,7 +120,7 @@ function setupSseHeaders(res: Response): void {
   res.write(": ping\n\n");
 }
 
-function sendEvent(res: Response, e: ActivityEvent): void {
+function sendEvent(res: PraetorResponse, e: ActivityEvent): void {
   try {
     res.write(`data: ${JSON.stringify(e)}\n\n`);
   } catch {

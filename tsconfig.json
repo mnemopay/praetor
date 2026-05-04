@@ -36,7 +36,11 @@
     { "path": "packages/sdk" },
     { "path": "packages/api" },
     { "path": "packages/coding-agent" },
-    { "path": "packages/research-agent" }
+    { "path": "packages/research-agent" },
+    { "path": "packages/computer-control" },
+    { "path": "packages/voice" },
+    { "path": "packages/browser" },
+    { "path": "packages/desktop" }
   ],
   "files": []
 }

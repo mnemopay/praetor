@@ -1,10 +1,20 @@
 {
   "name": "@praetor/api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./lib": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js"
+    }
+  },
   "scripts": {
     "build": "tsc -b",
     "dev": "node --watch dist/index.js",
@@ -15,11 +25,9 @@
     "@praetor/cli": "*",
     "@praetor/core": "*",
     "@praetor/tools": "*",
-    "express": "^5.1.0",
     "yaml": "^2.5.0"
   },
   "devDependencies": {
-    "@types/express": "^5.0.3",
     "@types/supertest": "^6.0.3",
     "supertest": "^7.1.4",
     "typescript": "^5.5.0",

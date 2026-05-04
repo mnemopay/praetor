@@ -1,12 +1,28 @@
 {
   "name": "@praetor/cli",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.1.0",
+  "description": "Praetor — the agent runtime CLI. Run YAML mission charters with native browser, sandbox, voice, screen, scrape, and payment tools wired in. EU AI Act Article 12 audit bundles, MnemoPay fiscal gating, prompt caching, governance defaults.",
+  "keywords": [
+    "agent",
+    "ai",
+    "runtime",
+    "charter",
+    "browser-agent",
+    "sandbox",
+    "tts",
+    "praetor",
+    "mnemopay",
+    "audit"
+  ],
+  "homepage": "https://github.com/mnemopay/praetor#readme",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "praetor": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "scripts": {
     "build": "tsc -b",
@@ -14,9 +30,11 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "@praetor/api": "*",
     "@praetor/core": "*",
     "@praetor/payments": "*",
     "@praetor/agents": "*",
+    "@praetor/coding-agent": "*",
     "@praetor/scrape": "*",
     "@praetor/knowledge": "*",
     "@praetor/router": "*",
@@ -28,6 +46,8 @@
     "@praetor/game-assets": "*",
     "@praetor/sandbox": "*",
     "@praetor/vision": "*",
+    "@praetor/voice": "*",
+    "@praetor/browser": "*",
     "@praetor/social": "*",
     "@praetor/world-gen": "*",
     "yaml": "^2.5.0"

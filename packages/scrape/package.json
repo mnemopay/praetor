@@ -1,7 +1,7 @@
 {
   "name": "@praetor/scrape",
-  "version": "0.1.0",
-  "description": "Praetor scrape pack — Crawl4AI-style HTML, sitemap walker, JSON-LD extractor, X.com syndication endpoint, robots-aware. Firecrawl available as paid tier.",
+  "version": "0.2.0",
+  "description": "Praetor scrape pack — native HTTP client (no third-party fetch lib), JSON-LD extractor, sitemap walker, X.com syndication endpoint, robots-aware. Crawl4AI / Playwright / Firecrawl are optional opt-in adapters.",
   "keywords": [
     "scrape",
     "crawl",
@@ -42,8 +42,5 @@
   "publishConfig": {
     "access": "public"
   },
-  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>",
-  "dependencies": {
-    "got-scraping": "^4.2.1"
-  }
+  "author": "Jeremiah Omiagbo <jeremiah@getbizsuite.com>"
 }

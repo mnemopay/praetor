@@ -1,11 +1,14 @@
 /**
  * Praetor Scrape pack — native scraping. The default path uses Node's built-in
- * `fetch` (Crawl4AI-style: no headless browser unless the page demands it),
- * with Playwright as the fallback for JS-rendered pages and Firecrawl as the
- * paid-tier escape hatch when both fail.
+ * `fetch` wrapped in a Praetor-owned HTTP client (timeout + single retry +
+ * normalized response shape). No third-party scraping lib is pulled in by
+ * default — Crawl4AI / Playwright / Firecrawl remain as opt-in adapters.
  *
- * Per the user's standing rule (`feedback_scraping_default.md`): never
- * Firecrawl first. Crawl4AI / Playwright are the defaults.
+ * Per Jeremiah's standing rules:
+ *   - `feedback_praetor_native_tools.md`: every Praetor tool is custom-native;
+ *     third-party libs are fallback-only, never the default codepath.
+ *   - `feedback_scraping_default.md`: never Firecrawl first. Native + Crawl4AI
+ *     + Playwright are the defaults.
  *
  * The pack also ships:
  *   - JSON-LD extractor (so a charter can pull schema.org structured data
@@ -14,9 +17,202 @@
  *   - X.com cookie path (paywalled tweets are unreachable without `auth_token`)
  *   - per-host rate-limit + polite default User-Agent
  */
-import { gotScraping } from "got-scraping";
 
 export type ScrapeBackend = "fetch" | "playwright" | "crawl4ai" | "playwright-mcp" | "firecrawl";
+
+/**
+ * Praetor-native HTTP client surface. Adapters / tests inject a fn matching
+ * this shape; the default implementation (`nativeHttpFetch`) uses
+ * `globalThis.fetch`. Returning `{ body, statusCode, headers }` keeps the
+ * shape stable regardless of which underlying transport is wired in.
+ */
+export interface PraetorHttpRequest {
+  url: string;
+  headers?: Record<string, string>;
+  timeoutMs?: number;
+  /** Number of retries for transient errors / 5xx. Default 1. */
+  retries?: number;
+  /**
+   * Deny requests to RFC1918 / loopback / link-local / cloud metadata
+   * targets. **Default true** — protects charters from being tricked into
+   * SSRF attacks (a scraped page that returns a 302 redirect to
+   * `http://169.254.169.254/latest/meta-data/iam/security-credentials/`
+   * is the canonical cloud-credential exfiltration vector).
+   *
+   * Pass `false` only for charters that legitimately need to reach
+   * localhost / private services (e.g. local dev dashboards).
+   */
+  denyInternal?: boolean;
+  /**
+   * Maximum redirect chain length. Defaults to 5. Each Location is
+   * re-checked against the SSRF policy before following.
+   */
+  maxRedirects?: number;
+}
+
+export interface PraetorHttpResponse {
+  body: string;
+  statusCode: number;
+  headers: Record<string, string | string[] | undefined>;
+}
+
+export type PraetorHttpFetch = (opts: PraetorHttpRequest) => Promise<PraetorHttpResponse>;
+
+/**
+ * Decide whether a URL points at an internal / metadata target that
+ * Praetor charters should not reach by default. Inspects URL hostname:
+ *
+ *   - Loopback: localhost, 127.0.0.0/8, ::1, 0.0.0.0
+ *   - Link-local + cloud metadata: 169.254.0.0/16 (catches AWS / GCP /
+ *     Azure / Hetzner / DigitalOcean metadata endpoints).
+ *   - RFC1918 private: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+ *   - CGN / Tailscale / Carrier-grade NAT: 100.64.0.0/10
+ *   - IPv6 unique-local + link-local: fc00::/7, fe80::/10
+ *
+ * Hostnames that aren't IP literals are treated as public (no DNS
+ * resolution at this layer — DNS rebinding is a known follow-up). The
+ * common-case attacker-supplied URL contains a literal IP though; this
+ * already blocks the easy paths.
+ */
+export function isInternalUrl(url: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  const host = u.hostname.toLowerCase();
+  if (host === "" || host === "localhost" || host === "0.0.0.0" || host === "ip6-localhost") return true;
+  // IPv6 literal — wrapped in [].
+  if (host.startsWith("[") && host.endsWith("]")) {
+    return isInternalIpv6(host.slice(1, -1));
+  }
+  // IPv4 dotted-quad.
+  const parts = host.split(".");
+  if (parts.length === 4 && parts.every((p) => /^\d+$/.test(p))) {
+    const [a, b] = parts.map(Number);
+    if (a === 127) return true;                 // 127.0.0.0/8 loopback
+    if (a === 10) return true;                  // 10.0.0.0/8 RFC1918
+    if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;    // 192.168.0.0/16
+    if (a === 169 && b === 254) return true;    // 169.254.0.0/16 link-local + cloud metadata
+    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 CGN / Tailscale
+    if (a === 0) return true;                   // 0.0.0.0/8
+  }
+  // Bare IPv6 (rare in URLs but still). A loose check on common patterns.
+  if (host.includes(":")) {
+    return isInternalIpv6(host);
+  }
+  return false;
+}
+
+function isInternalIpv6(addr: string): boolean {
+  const a = addr.toLowerCase();
+  if (a === "::1" || a === "::") return true;
+  if (a.startsWith("fe80:") || a.startsWith("fe80::")) return true; // link-local
+  // fc00::/7 unique-local — first byte starts with binary 1111110x → fc or fd.
+  if (a.startsWith("fc") || a.startsWith("fd")) return true;
+  // ::ffff:127.0.0.1 IPv4-mapped loopback.
+  if (a.startsWith("::ffff:")) {
+    const v4 = a.slice(7);
+    if (v4 === "127.0.0.1" || v4.startsWith("127.")) return true;
+    if (v4 === "169.254.169.254" || v4.startsWith("169.254.")) return true;
+    if (v4.startsWith("10.") || v4.startsWith("192.168.")) return true;
+  }
+  return false;
+}
+
+/**
+ * Default native HTTP client. SSRF-safe by default (`denyInternal: true`).
+ * Manual redirect chase so each Location is re-checked. Single retry on
+ * transient 5xx. Caller-supplied timeoutMs applies per attempt via
+ * AbortController.
+ */
+export const nativeHttpFetch: PraetorHttpFetch = async (opts) => {
+  const retries = Math.max(0, opts.retries ?? 1);
+  const denyInternal = opts.denyInternal !== false;
+  const maxRedirects = opts.maxRedirects ?? 5;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ac = new AbortController();
+    const timer = opts.timeoutMs ? setTimeout(() => ac.abort(), opts.timeoutMs) : null;
+    try {
+      let currentUrl = opts.url;
+      let currentHeaders: Record<string, string> | undefined = opts.headers;
+      let response: Response | null = null;
+      for (let hop = 0; hop <= maxRedirects; hop++) {
+        if (denyInternal && isInternalUrl(currentUrl)) {
+          throw new Error(
+            `praetor-http: refusing internal target '${currentUrl}' (set denyInternal:false on the request to opt in)`,
+          );
+        }
+        response = await globalThis.fetch(currentUrl, {
+          headers: currentHeaders,
+          signal: ac.signal,
+          redirect: "manual",
+        });
+        if (response.status >= 300 && response.status < 400 && response.status !== 304) {
+          const location = response.headers.get("location");
+          if (!location) break; // no Location header — treat as terminal
+          if (hop >= maxRedirects) {
+            throw new Error(`praetor-http: redirect limit (${maxRedirects}) exceeded at ${currentUrl}`);
+          }
+          // Resolve relative redirects against the current URL.
+          currentUrl = new URL(location, currentUrl).toString();
+          // Drop body-shaped headers on cross-origin redirects (Cookie /
+          // Authorization). Conservative — never re-send credentials.
+          if (currentHeaders) {
+            const same = sameOrigin(opts.url, currentUrl);
+            if (!same) {
+              const stripped: Record<string, string> = {};
+              for (const [k, v] of Object.entries(currentHeaders)) {
+                if (/^(cookie|authorization|x-csrf-token)$/i.test(k)) continue;
+                stripped[k] = v;
+              }
+              currentHeaders = stripped;
+            }
+          }
+          continue;
+        }
+        break;
+      }
+      if (!response) throw new Error(`praetor-http: no response for ${opts.url}`);
+      const body = await response.text();
+      const headers: Record<string, string | string[]> = {};
+      response.headers.forEach((value, key) => {
+        const existing = headers[key];
+        if (existing === undefined) headers[key] = value;
+        else if (Array.isArray(existing)) existing.push(value);
+        else headers[key] = [existing, value];
+      });
+      if (response.status >= 500 && response.status <= 599 && attempt < retries) {
+        lastErr = new Error(`praetor-http: ${response.status} on ${opts.url}`);
+        continue;
+      }
+      return { body, statusCode: response.status, headers };
+    } catch (err) {
+      lastErr = err;
+      // Don't retry SSRF refusals or redirect-limit overflows — they're
+      // structural, not transient.
+      const msg = err instanceof Error ? err.message : "";
+      if (/refusing internal target|redirect limit/.test(msg)) break;
+      if (attempt >= retries) break;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  throw lastErr ?? new Error(`praetor-http: failed without error for ${opts.url}`);
+};
+
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    const ua = new URL(a);
+    const ub = new URL(b);
+    return ua.protocol === ub.protocol && ua.host === ub.host;
+  } catch {
+    return false;
+  }
+}
 
 export interface ScrapeRequest {
   url: string;
@@ -32,6 +228,12 @@ export interface ScrapeRequest {
   ignoreRobots?: boolean;
   /** Minimum delay between requests to the same host. Defaults to 250ms. */
   crawlDelayMs?: number;
+  /**
+   * Allow scraping internal targets (localhost / RFC1918 / 169.254.x).
+   * Default false (SSRF-safe). Pass true only for charters that
+   * legitimately need to reach a local dev service.
+   */
+  allowInternal?: boolean;
 }
 
 export interface ScrapeResult {
@@ -106,36 +308,39 @@ const DEFAULT_UA =
   "PraetorBot/0.1 (+https://praetor.dev/scraper; agent=praetor; respects=robots.txt)";
 
 /**
- * Default fetch adapter. Uses Node's built-in `fetch`. Adequate for static
- * HTML, JSON, sitemap.xml, robots.txt, llms.txt, ai.txt — i.e. the 80% case.
+ * Default fetch adapter. Uses the Praetor-native HTTP client wrapping
+ * `globalThis.fetch`. Adequate for static HTML, JSON, sitemap.xml, robots.txt,
+ * llms.txt, ai.txt — i.e. the 80% case. JS-rendered pages graduate to the
+ * Crawl4AI or Playwright(-MCP) backend.
  */
 export class FetchAdapter implements ScrapeAdapter {
   name: ScrapeBackend = "fetch";
-  constructor(private readonly gotScrapingImpl: typeof gotScraping = gotScraping) {}
+  constructor(private readonly httpFetch: PraetorHttpFetch = nativeHttpFetch) {}
   async fetch(req: ScrapeRequest): Promise<ScrapeResult> {
     const x = parseXStatusUrl(req.url);
     if (x && !req.headers?.Cookie) {
       return this.fetchXSyndication(req, x);
     }
-    
-    const res = await this.gotScrapingImpl({
+
+    const res = await this.httpFetch({
       url: req.url,
       headers: {
         "user-agent": req.userAgent ?? DEFAULT_UA,
         accept: "text/html,application/xhtml+xml,application/xml,application/json;q=0.9,*/*;q=0.8",
         ...(req.headers ?? {}),
       },
-      timeout: { request: req.timeoutMs ?? 15_000 },
-      retry: { limit: 1 },
-      throwHttpErrors: false,
+      timeoutMs: req.timeoutMs ?? 15_000,
+      retries: 1,
+      denyInternal: req.allowInternal !== true,
     });
-    
-    const body = res.body as string;
-    const contentType = (res.headers["content-type"] as string) ?? "";
+
+    const body = res.body;
+    const contentTypeRaw = res.headers["content-type"];
+    const contentType = (Array.isArray(contentTypeRaw) ? contentTypeRaw[0] : contentTypeRaw) ?? "";
     const isHtml = /text\/html|xhtml/i.test(contentType);
     const text = isHtml ? extractReadableText(body) : undefined;
     const warnings = isHtml ? detectScrapeWarnings(body, text) : [];
-    
+
     return {
       url: req.url,
       status: res.statusCode,
@@ -159,16 +364,16 @@ export class FetchAdapter implements ScrapeAdapter {
    */
   private async fetchXSyndication(req: ScrapeRequest, x: { id: string }): Promise<ScrapeResult> {
     const synURL = `https://cdn.syndication.twimg.com/tweet-result?id=${x.id}&token=a`;
-    
-    const res = await this.gotScrapingImpl({
+
+    const res = await this.httpFetch({
       url: synURL,
       headers: { "user-agent": req.userAgent ?? DEFAULT_UA, accept: "application/json" },
-      timeout: { request: req.timeoutMs ?? 15_000 },
-      retry: { limit: 1 },
-      throwHttpErrors: false,
+      timeoutMs: req.timeoutMs ?? 15_000,
+      retries: 1,
+      denyInternal: req.allowInternal !== true,
     });
     
-    const body = res.body as string;
+    const body = res.body;
     let text: string | undefined;
     try {
       const parsed = JSON.parse(body) as { text?: string; user?: { screen_name?: string; name?: string }; created_at?: string; favorite_count?: number; conversation_count?: number };
@@ -178,11 +383,13 @@ export class FetchAdapter implements ScrapeAdapter {
     } catch {
       // body wasn't JSON; leave text undefined
     }
-    
+
+    const ctRaw = res.headers["content-type"];
+    const contentType = (Array.isArray(ctRaw) ? ctRaw[0] : ctRaw) ?? "application/json";
     return {
       url: req.url,
       status: res.statusCode,
-      contentType: (res.headers["content-type"] as string) ?? "application/json",
+      contentType,
       body,
       fetchedAt: new Date().toISOString(),
       backend: this.name,

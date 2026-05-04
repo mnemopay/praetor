@@ -1,0 +1,54 @@
+# Praetor — full end-to-end demo charter (LLM-driven).
+#
+# Same goal as demo-basic.yaml but executed by an LLM agent that decides
+# the plan from the natural-language `goal` string. Exercises:
+#   - prompt caching (system prompt + tool definitions cached after turn 1)
+#   - FiscalGate budget enforcement
+#   - Article 12 audit bundle
+#   - Live activity stream (visible in the dashboard if praetor serve is up)
+#
+# Requires:
+#   ANTHROPIC_API_KEY (or OPENAI_API_KEY / OPENROUTER_API_KEY)
+#
+# Optional (auto-enabled if the env / peer dep is present):
+#   - playwright-core peer + AZURE_SPEECH_KEY → unlocks browser_*  + voice_synthesize
+#   - Docker on PATH                          → auto sandbox kind picks docker
+#
+# Run with:
+#   ANTHROPIC_API_KEY=sk-ant-... node packages/cli/dist/index.js run charters/demo-full.yaml --article12 ./audit-bundle/
+
+name: praetor-full-demo
+goal: |
+  Pick a public-facing example URL (use https://example.com unless given a better target).
+  Scrape it via scrape_url. Use profile_geo_competitor to extract its GEO surface.
+  Draft a 3-step outreach sequence with geo_outreach_sequence.
+  Generate a small SEO bundle via generate_seo_site that summarizes the work.
+  Store the summary in the knowledge base via ingest_knowledge.
+  Upsert a contact record via upsert_contact for the demo lead.
+  Stop. Don't browse, don't run code, don't spend money.
+
+agents:
+  - role: developer
+
+# Budget cap is intentionally tight — proves the FiscalGate works.
+budget:
+  maxUsd: 0.20
+  approvalThresholdUsd: 0.05
+
+# Auto-mode probes Docker availability; falls back to mock when Docker is absent.
+sandbox:
+  kind: auto
+
+# Route requirement: prefer a balanced model, agent-tagged when available.
+route:
+  quality: balanced
+  preferTags:
+    - agent
+    - coding
+
+outputs:
+  - praetor-out/seo/sitemap.xml
+  - praetor-out/seo/llms.txt
+
+compliance:
+  article12: true

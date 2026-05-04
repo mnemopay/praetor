@@ -1,16 +1,18 @@
 /**
- * @praetor/sandbox — microVM isolation for charters that touch real infra.
+ * @praetor/sandbox — sandboxed execution for charters that touch real infra.
  *
- * Three adapters:
- *   - MockSandbox: in-process; for tests + dry runs.
- *   - E2bSandbox: cloud, ~150 ms cold start, KVM hardware isolation. Calls e2b.dev.
- *     Wraps the public REST surface. No e2b SDK dependency required at build time;
- *     attach a sender at runtime so this package stays dep-free.
- *   - FirecrackerSandbox: self-hosted. Talks to a local firecracker REST API socket
- *     for sovereign-mode deploys (DARPA, EU procurement). Same interface as e2b.
+ * Five adapters, ranked by isolation:
+ *   - LocalSandbox: direct host execution, NO isolation. Use only for
+ *     trusted code (e.g. coding-agent editing the user's own repo).
+ *   - MockSandbox: in-process, deterministic. Tests + dry runs.
+ *   - DockerSandbox: real OS-level isolation via the host's `docker` CLI.
+ *     Native — no third-party Docker SDK in the default codepath.
+ *   - E2bSandbox: cloud, ~150 ms cold start, KVM hardware isolation. Opt-in.
+ *   - FirecrackerSandbox: self-hosted, sovereign-mode KVM microVM. Opt-in.
  *
- * A charter declares `sandbox: { kind: "e2b" | "firecracker-self-hosted" | "mock" }`.
- * The runtime picks the matching adapter and runs the charter inside.
+ * A charter declares `sandbox: { kind: "auto" | "local" | "mock" | "docker"
+ * | "e2b" | "firecracker" }`. The dispatcher in `auto` mode probes Docker
+ * and falls through to mock if Docker isn't reachable.
  */
 
 export interface ExecResult {
@@ -33,7 +35,7 @@ export interface Sandbox {
   close(): Promise<void>;
 }
 
-export type SandboxKind = "mock" | "e2b" | "firecracker-self-hosted";
+export type SandboxKind = "auto" | "local" | "mock" | "docker" | "e2b" | "firecracker" | "firecracker-self-hosted";
 
 export interface SandboxFactory {
   create(opts?: { template?: string; envVars?: Record<string, string> }): Promise<Sandbox>;
@@ -179,19 +181,55 @@ export class FirecrackerSandboxFactory implements SandboxFactory {
 
 export interface SandboxDispatcherOpts {
   mock?: SandboxFactory;
+  local?: SandboxFactory;
+  docker?: SandboxFactory;
   e2b?: SandboxFactory;
   firecracker?: SandboxFactory;
+  /**
+   * Probe used by `kind: "auto"` to decide between docker → mock. Defaults
+   * to `DockerSandboxFactory.isAvailable()`. Tests inject a fake.
+   */
+  isDockerAvailable?: () => Promise<boolean>;
 }
 
 export class SandboxDispatcher {
   constructor(private opts: SandboxDispatcherOpts) {}
   async create(kind: SandboxKind, runtimeOpts?: { template?: string; envVars?: Record<string, string> }): Promise<Sandbox> {
+    if (kind === "auto") {
+      const dockerOk = await (this.opts.isDockerAvailable ?? defaultDockerProbe)();
+      const resolved: SandboxKind = dockerOk && this.opts.docker ? "docker" : "mock";
+      return this.create(resolved, runtimeOpts);
+    }
     if (kind === "mock") return (this.opts.mock ?? new MockSandboxFactory()).create(runtimeOpts);
+    if (kind === "local") {
+      if (!this.opts.local) throw new Error("sandbox kind 'local' requested but no LocalSandboxFactory configured. Pass { local: new LocalSandboxFactory({ cwd }) }.");
+      return this.opts.local.create(runtimeOpts);
+    }
+    if (kind === "docker") {
+      if (!this.opts.docker) throw new Error("sandbox kind 'docker' requested but no DockerSandboxFactory configured. Pass { docker: new DockerSandboxFactory() }.");
+      return this.opts.docker.create(runtimeOpts);
+    }
     if (kind === "e2b") {
       if (!this.opts.e2b) throw new Error("sandbox kind 'e2b' requested but no E2bSandboxFactory configured. Pass { e2b: new E2bSandboxFactory(httpE2bClient({apiKey})) }.");
       return this.opts.e2b.create(runtimeOpts);
     }
-    if (!this.opts.firecracker) throw new Error("sandbox kind 'firecracker-self-hosted' requested but no FirecrackerSandboxFactory configured.");
-    return this.opts.firecracker.create(runtimeOpts);
+    // firecracker + firecracker-self-hosted are aliases.
+    if (kind === "firecracker" || kind === "firecracker-self-hosted") {
+      if (!this.opts.firecracker) throw new Error("sandbox kind 'firecracker' requested but no FirecrackerSandboxFactory configured.");
+      return this.opts.firecracker.create(runtimeOpts);
+    }
+    throw new Error(`sandbox: unknown kind '${kind as string}'`);
   }
 }
+
+async function defaultDockerProbe(): Promise<boolean> {
+  // Lazy import to avoid pulling docker.ts when nobody used auto mode yet.
+  const { DockerSandboxFactory } = await import("./docker.js");
+  return DockerSandboxFactory.isAvailable();
+}
+
+/* ─── Re-exports for the new local/docker adapters ─────────────────────── */
+export { LocalSandbox, LocalSandboxFactory } from "./local.js";
+export type { LocalSandboxOptions } from "./local.js";
+export { DockerSandbox, DockerSandboxFactory } from "./docker.js";
+export type { DockerSandboxOptions } from "./docker.js";

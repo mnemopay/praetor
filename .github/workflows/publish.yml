@@ -4,10 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: Package to publish (ugc | design | scrape | seo | core)
+        description: 'Package name (the part after "@praetor/" — e.g. browser, voice, scrape).'
         required: true
-        type: choice
-        options: [ugc, design, scrape, seo, core]
+        type: string
+      tag:
+        description: 'npm dist-tag to publish under. Use "next" for prereleases, "latest" for production.'
+        required: false
+        type: string
+        default: latest
 
 jobs:
   publish:
@@ -22,11 +26,29 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
           cache: npm
+
+      # Fail loud if the requested package directory or package.json is missing.
+      - name: Verify package exists and is publishable
+        run: |
+          set -euo pipefail
+          PKG="packages/${{ github.event.inputs.package }}/package.json"
+          if [ ! -f "$PKG" ]; then
+            echo "::error::no package.json at $PKG"
+            exit 1
+          fi
+          # Refuse to publish workspace-private packages by accident.
+          if node -p "JSON.parse(require('fs').readFileSync('$PKG','utf8')).private === true" 2>/dev/null | grep -q true; then
+            echo "::error::$PKG is marked private; remove \"private\": true to publish"
+            exit 1
+          fi
+          echo "Package OK: $(node -p "require('./$PKG').name")@$(node -p "require('./$PKG').version")"
+
       - run: npm ci
       - run: npm run build
       - run: npm test
-      - name: Publish
+
+      - name: Publish to npm
         working-directory: packages/${{ github.event.inputs.package }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public --provenance
+        run: npm publish --access public --provenance --tag "${{ github.event.inputs.tag }}"

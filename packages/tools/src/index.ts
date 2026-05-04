@@ -155,24 +155,30 @@ export class ToolRegistry {
     if (estUsd > 0 && ctx.fiscal) {
       await ctx.fiscal.approve({ tool: name, estUsd, input });
     }
-    ctx.audit?.record("tool.call.start", { name, estUsd, role: ctx.role, metadata: reg.def.metadata, input: redact(input) });
+    const eventId = mintEventId();
+    ctx.audit?.record("tool.call.start", { eventId, name, estUsd, role: ctx.role, metadata: reg.def.metadata, input: redact(input) });
 
     try {
       const out = (await reg.handler(input)) as O;
-      ctx.audit?.record("tool.call.ok", { name, estUsd, role: ctx.role, metadata: reg.def.metadata });
+      ctx.audit?.record("tool.call.ok", { eventId, name, estUsd, role: ctx.role, metadata: reg.def.metadata, result: out });
       if (estUsd > 0 && ctx.fiscal) {
         await ctx.fiscal.settle({ tool: name, estUsd, actualUsd: estUsd });
       }
       return out;
     } catch (e) {
       const error = (e as Error).message;
-      ctx.audit?.record("tool.call.error", { name, error, role: ctx.role, metadata: reg.def.metadata });
+      ctx.audit?.record("tool.call.error", { eventId, name, error, role: ctx.role, metadata: reg.def.metadata });
       if (estUsd > 0 && ctx.fiscal) {
         await ctx.fiscal.settle({ tool: name, estUsd, error });
       }
       throw e;
     }
   }
+}
+
+function mintEventId(): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
+  return `evt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function redact(input: Record<string, unknown>): Record<string, unknown> {

@@ -12,6 +12,7 @@ import {
   OpenAIImageAdapter,
   LumaMotionAdapter,
   HedraMotionAdapter,
+  SoraMotionAdapter,
   AzureNeuralVoiceAdapter,
   ProductionUgcRenderer,
   type Compositor,
@@ -179,6 +180,97 @@ describe("LumaMotionAdapter", () => {
     await expect(
       a.generate({ prompt: "p", portraitUrl: "https://example.com/p.png", durationSeconds: 5, width: 1080, height: 1920 }),
     ).rejects.toThrow(/bad prompt/);
+  });
+});
+
+describe("SoraMotionAdapter", () => {
+  it("posts to /v1/videos with model + prompt + size + seconds, polls, downloads mp4", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "praetor-sora-"));
+    let createCall: { url: string; body?: any } | null = null;
+    let pollCount = 0;
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith("/v1/videos") && init?.method === "POST") {
+        createCall = { url: u, body: JSON.parse(init.body as string) };
+        return new Response(JSON.stringify({ id: "vid_abc", status: "queued" }), { status: 200 });
+      }
+      if (u.endsWith("/v1/videos/vid_abc") && (!init?.method || init.method === "GET")) {
+        pollCount += 1;
+        if (pollCount === 1) return new Response(JSON.stringify({ id: "vid_abc", status: "in_progress" }), { status: 200 });
+        return new Response(JSON.stringify({ id: "vid_abc", status: "completed" }), { status: 200 });
+      }
+      if (u.endsWith("/v1/videos/vid_abc/content")) {
+        return new Response(new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]), { status: 200 });
+      }
+      return new Response("not handled", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const adapter = new SoraMotionAdapter({
+      apiKey: "sk-test",
+      outDir: dir,
+      fetchImpl,
+      pollIntervalMs: 5,
+      maxPollMs: 5_000,
+    });
+    const r = await adapter.generate({
+      prompt: "Person speaks to camera, casual UGC selfie energy.",
+      durationSeconds: 8,
+      width: 1080,
+      height: 1920,
+    });
+    expect(r.videoPath).toMatch(/motion\.mp4$/);
+    const stats = statSync(r.videoPath);
+    expect(stats.size).toBeGreaterThan(0);
+
+    // Verify the create payload — Sora expects size + seconds.
+    expect(createCall).not.toBeNull();
+    expect((createCall as any).body.model).toBe("sora-2");
+    expect((createCall as any).body.size).toBe("720x1280"); // 1080×1920 → portrait → snapped to 720x1280
+    expect((createCall as any).body.seconds).toBe(8);
+    expect(adapter.backend).toBe("sora-2");
+  });
+
+  it("'sora-2-pro' model selection sets backend tag", () => {
+    const a = new SoraMotionAdapter({ apiKey: "k", model: "sora-2-pro", outDir: "." });
+    expect(a.backend).toBe("sora-2-pro");
+  });
+
+  it("fails fast on the create-call error", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response("rate limited", { status: 429 }),
+    ) as unknown as typeof fetch;
+    const a = new SoraMotionAdapter({ apiKey: "k", outDir: ".", fetchImpl });
+    await expect(a.generate({ prompt: "x", durationSeconds: 6, width: 720, height: 1280 }))
+      .rejects.toThrow(/SoraMotionAdapter: create 429/);
+  });
+
+  it("clamps seconds into the 4–20 range Sora supports", async () => {
+    let createBody: any;
+    const fetchImpl = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith("/v1/videos") && init?.method === "POST") {
+        createBody = JSON.parse(init.body as string);
+        return new Response(JSON.stringify({ id: "v", status: "queued" }), { status: 200 });
+      }
+      if (u.endsWith("/v1/videos/v")) return new Response(JSON.stringify({ id: "v", status: "completed" }), { status: 200 });
+      if (u.endsWith("/v1/videos/v/content")) return new Response(new Uint8Array([0]), { status: 200 });
+      return new Response("", { status: 404 });
+    }) as unknown as typeof fetch;
+    const dir = mkdtempSync(join(tmpdir(), "praetor-sora-clamp-"));
+    const a = new SoraMotionAdapter({ apiKey: "k", outDir: dir, fetchImpl, pollIntervalMs: 1, maxPollMs: 1000 });
+    await a.generate({ prompt: "x", durationSeconds: 2, width: 1024, height: 1024 });
+    expect(createBody.seconds).toBe(4); // 2 → floor 4
+    expect(createBody.size).toBe("1024x1024"); // square
+    await a.generate({ prompt: "x", durationSeconds: 30, width: 1280, height: 720 });
+    expect(createBody.seconds).toBe(20); // 30 → cap 20
+    expect(createBody.size).toBe("1280x720"); // landscape
+  });
+});
+
+describe("priceOf — sora-2 / sora-2-pro entries", () => {
+  it("prices sora-2 and sora-2-pro distinctly", () => {
+    expect(priceOf({ portrait: "reuse", motion: "sora-2", voice: "edge-tts" })).toBeCloseTo(0.30, 4);
+    expect(priceOf({ portrait: "reuse", motion: "sora-2-pro", voice: "edge-tts" })).toBeCloseTo(0.50, 4);
   });
 });
 

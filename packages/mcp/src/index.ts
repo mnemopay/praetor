@@ -39,19 +39,61 @@ export interface McpServerOptions {
   version?: string;
   registry: ToolRegistry;
   ctx?: ToolCallContext;
+  /**
+   * If set, only tools whose name is in this list are exposed via tools/list
+   * and callable via tools/call. Use this to publish a curated subset of
+   * the registry to external MCP clients (Claude Desktop, Cursor, etc).
+   */
+  allowTools?: readonly string[];
+  /**
+   * If set, tools whose name matches are HIDDEN from tools/list and
+   * REJECTED on tools/call. Layered on top of allowTools (deny wins).
+   * Useful for blocking destructive tools like write_file / run_command
+   * from being callable by external MCP clients while keeping them
+   * available to internal charters.
+   */
+  denyTools?: readonly string[];
+  /**
+   * Stdio transport caps (defense against memory-exhaustion DoS):
+   *   - maxLineBytes: drop any incoming line longer than this. Default 1 MB.
+   *   - maxArgsBytes: refuse tools/call when the args JSON is larger.
+   *     Default 256 KB.
+   */
+  limits?: {
+    maxLineBytes?: number;
+    maxArgsBytes?: number;
+  };
 }
+
+const DEFAULT_MAX_LINE_BYTES = 1_048_576;     // 1 MB
+const DEFAULT_MAX_ARGS_BYTES = 262_144;       // 256 KB
 
 export class McpServer {
   private name: string;
   private version: string;
   private registry: ToolRegistry;
   private ctx: ToolCallContext;
+  private allowTools?: ReadonlySet<string>;
+  private denyTools?: ReadonlySet<string>;
+  private maxArgsBytes: number;
+  private maxLineBytes: number;
 
   constructor(opts: McpServerOptions) {
     this.name = opts.name ?? "praetor-mcp";
     this.version = opts.version ?? "0.0.1";
     this.registry = opts.registry;
     this.ctx = opts.ctx ?? {};
+    this.allowTools = opts.allowTools ? new Set(opts.allowTools) : undefined;
+    this.denyTools = opts.denyTools ? new Set(opts.denyTools) : undefined;
+    this.maxArgsBytes = opts.limits?.maxArgsBytes ?? DEFAULT_MAX_ARGS_BYTES;
+    this.maxLineBytes = opts.limits?.maxLineBytes ?? DEFAULT_MAX_LINE_BYTES;
+  }
+
+  /** True iff a tool name is callable through this MCP server. */
+  private isToolExposed(name: string): boolean {
+    if (this.denyTools?.has(name)) return false;
+    if (this.allowTools && !this.allowTools.has(name)) return false;
+    return this.registry.has(name);
   }
 
   async handle(req: JsonRpcRequest): Promise<JsonRpcResponse | null> {
@@ -67,17 +109,33 @@ export class McpServer {
 
         case "tools/list":
           return ok(id, {
-            tools: this.registry.list().map((t) => ({
-              name: t.name,
-              description: t.description,
-              inputSchema: t.schema,
-            })),
+            tools: this.registry
+              .list()
+              .filter((t) => this.isToolExposed(t.name))
+              .map((t) => ({
+                name: t.name,
+                description: t.description,
+                inputSchema: t.schema,
+              })),
           });
 
         case "tools/call": {
           const name = req.params?.name as string;
           const args = (req.params?.arguments as Record<string, unknown>) ?? {};
           if (!name) return err(id, -32602, "params.name required");
+          if (typeof name !== "string" || name.length > 256) {
+            return err(id, -32602, "params.name must be a string ≤ 256 chars");
+          }
+          if (!this.isToolExposed(name)) {
+            // Don't leak whether the tool exists in the wider registry —
+            // external MCP clients only know about exposed tools.
+            return err(id, -32601, `tool '${name}' not exposed via this server`);
+          }
+          // Cap argument size so a hostile client can't OOM the runtime.
+          const argsSize = Buffer.byteLength(JSON.stringify(args), "utf8");
+          if (argsSize > this.maxArgsBytes) {
+            return err(id, -32602, `arguments exceed ${this.maxArgsBytes} bytes`);
+          }
           const result = await this.registry.call(name, args, this.ctx);
           return ok(id, {
             content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result) }],
@@ -99,18 +157,34 @@ export class McpServer {
     }
   }
 
-  /** Run as a stdio MCP server. Reads JSON-RPC requests line-by-line on stdin. */
+  /**
+   * Run as a stdio MCP server. Reads JSON-RPC requests line-by-line on
+   * stdin. Lines longer than `limits.maxLineBytes` are dropped (defense
+   * against memory-exhaustion DoS). The server keeps running so a single
+   * malformed / oversized line doesn't take it down.
+   */
   async runStdio(stdin: NodeJS.ReadableStream, stdout: NodeJS.WritableStream): Promise<void> {
     let buffer = "";
+    const maxLine = this.maxLineBytes;
     return new Promise((resolve) => {
       stdin.setEncoding?.("utf8");
       stdin.on("data", async (chunk: string) => {
         buffer += chunk;
+        // Reset the buffer if it grows past the cap and contains no \n yet.
+        if (buffer.length > maxLine && buffer.indexOf("\n") < 0) {
+          buffer = "";
+          stdout.write(JSON.stringify(err(null, -32700, `incoming line exceeds ${maxLine} bytes; buffer reset`)) + "\n");
+          return;
+        }
         let idx;
         while ((idx = buffer.indexOf("\n")) >= 0) {
           const line = buffer.slice(0, idx).trim();
           buffer = buffer.slice(idx + 1);
           if (!line) continue;
+          if (Buffer.byteLength(line, "utf8") > maxLine) {
+            stdout.write(JSON.stringify(err(null, -32700, `line exceeds ${maxLine} bytes`)) + "\n");
+            continue;
+          }
           let req: JsonRpcRequest;
           try {
             req = JSON.parse(line);
@@ -135,15 +209,65 @@ export interface McpClientTransport {
 
 /** HTTP+JSON transport — works for the new "streamable HTTP" servers. */
 export class HttpTransport implements McpClientTransport {
-  constructor(private endpoint: string, private headers: Record<string, string> = {}) {}
-  async send(req: JsonRpcRequest): Promise<JsonRpcResponse> {
-    const res = await fetch(this.endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...this.headers },
-      body: JSON.stringify(req),
-    });
-    return (await res.json()) as JsonRpcResponse;
+  private readonly timeoutMs: number;
+  private readonly maxResponseBytes: number;
+  private readonly fetchImpl: typeof fetch;
+  constructor(
+    private endpoint: string,
+    private headers: Record<string, string> = {},
+    opts: { timeoutMs?: number; maxResponseBytes?: number; fetchImpl?: typeof fetch } = {},
+  ) {
+    this.timeoutMs = opts.timeoutMs ?? 30_000;
+    this.maxResponseBytes = opts.maxResponseBytes ?? 8 * 1024 * 1024; // 8 MB
+    this.fetchImpl = opts.fetchImpl ?? fetch;
   }
+  async send(req: JsonRpcRequest): Promise<JsonRpcResponse> {
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), this.timeoutMs);
+    try {
+      const res = await this.fetchImpl(this.endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...this.headers },
+        body: JSON.stringify(req),
+        signal: ac.signal,
+      });
+      // Size-limited body read to defend against a hostile MCP server
+      // returning a 1 GB response that would OOM the client.
+      const body = await readWithLimit(res, this.maxResponseBytes);
+      return JSON.parse(body) as JsonRpcResponse;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function readWithLimit(res: Response, limit: number): Promise<string> {
+  if (!res.body) return res.text();
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (value) {
+      total += value.byteLength;
+      if (total > limit) {
+        try { reader.cancel(); } catch { /* best-effort */ }
+        throw new Error(`mcp http response exceeds ${limit} bytes`);
+      }
+      chunks.push(value);
+    }
+  }
+  return new TextDecoder("utf-8").decode(concatChunks(chunks));
+}
+
+function concatChunks(chunks: Uint8Array[]): Uint8Array {
+  let length = 0;
+  for (const c of chunks) length += c.byteLength;
+  const out = new Uint8Array(length);
+  let offset = 0;
+  for (const c of chunks) { out.set(c, offset); offset += c.byteLength; }
+  return out;
 }
 
 /** Stdio transport — spawns a child process speaking MCP over stdin/stdout. */

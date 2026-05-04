@@ -1,11 +1,11 @@
 {
   "name": "@praetor/coding-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "description": "Praetor coding agent: file/git/test tools, repo-rooted, free-tier compatible.",
+  "description": "Praetor coding agent: file/git/test tools + native unified-diff applier + drift-tolerant apply_edit. Repo-rooted, free-tier compatible.",
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",
@@ -15,10 +15,10 @@
     "@praetor/agents": "*",
     "@praetor/core": "*",
     "@praetor/router": "*",
-    "@praetor/tools": "*",
-    "diff": "^9.0.0"
+    "@praetor/tools": "*"
   },
   "devDependencies": {
+    "diff": "^9.0.0",
     "@types/diff": "^7.0.2",
     "@types/node": "^22.7.0",
     "typescript": "^5.5.0",
