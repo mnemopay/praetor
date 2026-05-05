@@ -25,6 +25,7 @@
     "@kpanks/cli": "*",
     "@kpanks/core": "*",
     "@kpanks/tools": "*",
+    "@supabase/supabase-js": "^2.105.3",
     "yaml": "^2.5.0"
   },
   "devDependencies": {

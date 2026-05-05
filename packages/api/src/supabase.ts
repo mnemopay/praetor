@@ -140,11 +140,62 @@ class PraetorStoreClient {
 }
 
 let singleton: PraetorStoreClient | null = null;
+// Cast as PraetorStoreClient even when it's actually the real Supabase
+// client — the two are structurally compatible on the .from(...).select()
+// /insert/update/eq/limit/single/maybeSingle chain that every caller uses.
+let realClient: PraetorStoreClient | null = null;
+let realInitTried = false;
 
-/** Returns the single in-memory store client. Name kept for API compatibility
- * with prior call sites — there is no Supabase here. */
+/**
+ * Returns the active store client.
+ *
+ * If `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are set in the
+ * environment, this returns a real `@supabase/supabase-js` client (loaded
+ * synchronously via createRequire so the import-graph stays predictable
+ * for the api server's startup path).
+ *
+ * Otherwise, it returns the in-memory PraetorStoreClient — same
+ * PostgREST-shaped surface, lost on restart.
+ *
+ * The real Supabase client and the shim share enough of the `.from()` chain
+ * that every existing call site keeps working unchanged. For surfaces
+ * specific to one or the other (auth flows, RPC), branch on
+ * `isRealSupabase()`.
+ */
 export function supabaseAdmin(): PraetorStoreClient {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (url && key) {
+    if (realClient) return realClient;
+    if (!realInitTried) {
+      realInitTried = true;
+      try {
+        // createRequire keeps this synchronous — required because supabaseAdmin()
+        // is called from synchronous code paths during server boot.
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { createRequire } = require("node:module");
+        const req = createRequire(import.meta.url);
+        const supabase = req("@supabase/supabase-js");
+        realClient = supabase.createClient(url, key, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        }) as PraetorStoreClient;
+        // eslint-disable-next-line no-console
+        console.log("[praetor-api] real Supabase client active —", url);
+        return realClient;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[praetor-api] @supabase/supabase-js not installed; falling back to in-memory store. Run: npm install @supabase/supabase-js");
+        // fall through to in-memory shim
+      }
+    }
+  }
   return (singleton ??= new PraetorStoreClient());
+}
+
+/** True when the active store is the real Supabase client (env vars set
+ * and the SDK installed). */
+export function isRealSupabase(): boolean {
+  return !!realClient;
 }
 
 /** Public-facing alias — new code should use this. */
