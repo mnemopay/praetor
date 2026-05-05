@@ -298,21 +298,29 @@ export class TreeIndexKnowledgeBase implements KnowledgeBase {
 }
 
 /** Heuristic chooser useful as a default + as a deterministic test fixture.
- * Picks the child whose title or summary contains the most query terms. */
+ * Picks the child whose title or summary contains the most query terms.
+ * Title hits are weighted 2× because the title is a stronger signal of what
+ * a section is about than incidental body text. Common English words are
+ * filtered out so questions like "what does X require?" don't degenerate
+ * to scoring on "what" / "does". */
 export function makeKeywordTreeIndexLlm(): TreeIndexLlm {
   return {
     async pick({ question, options }) {
       const terms = question
         .toLowerCase()
         .split(/[^a-z0-9]+/)
-        .filter((t) => t.length >= 3);
+        .filter((t) => t.length >= 3 && !STOP_WORDS.has(t));
       if (terms.length === 0) return { choice: 0 };
       let best = 0;
       let bestScore = 0;
       options.forEach((opt, i) => {
-        const blob = `${opt.title}\n${opt.summary}`.toLowerCase();
+        const title = opt.title.toLowerCase();
+        const summary = opt.summary.toLowerCase();
         let score = 0;
-        for (const t of terms) if (blob.includes(t)) score += 1;
+        for (const t of terms) {
+          if (title.includes(t)) score += 2;
+          if (summary.includes(t)) score += 1;
+        }
         if (score > bestScore) {
           bestScore = score;
           best = i + 1;
@@ -322,3 +330,14 @@ export function makeKeywordTreeIndexLlm(): TreeIndexLlm {
     },
   };
 }
+
+const STOP_WORDS = new Set([
+  "the", "and", "for", "are", "but", "not", "you", "all", "can", "had",
+  "her", "was", "one", "our", "out", "day", "get", "has", "him", "his",
+  "how", "man", "new", "now", "old", "see", "two", "way", "who", "boy",
+  "did", "its", "let", "put", "say", "she", "too", "use", "any", "with",
+  "this", "that", "have", "from", "they", "been", "what", "your", "when",
+  "make", "than", "must", "does", "such", "into", "shall", "where",
+  "which", "their", "would", "there", "these", "about", "under",
+  "least", "those", "while", "until",
+]);
