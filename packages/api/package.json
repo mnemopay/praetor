@@ -21,9 +21,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@kpanks/cli": "*",
-    "@kpanks/core": "*",
-    "@kpanks/tools": "*",
+    "@kpanks/core": "^0.1.0",
+    "@kpanks/tools": "^0.1.0",
     "@supabase/supabase-js": "^2.105.3",
     "yaml": "^2.5.0"
   },
