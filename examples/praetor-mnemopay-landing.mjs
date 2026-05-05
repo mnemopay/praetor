@@ -268,7 +268,7 @@ const landing = `<!DOCTYPE html>
 <span class="k">audit</span>:
   <span class="k">article12</span>: <span class="s">true</span>     <span class="c"># EU AI Act bundle on completion</span>
 <span class="k">agent</span>: openclaw      <span class="c"># or hermes, claude-code, custom</span></pre></div>
-    <div class="pane" data-pane="ugc"><pre><span class="k">import</span> { defaultRenderer, specFromGoal } <span class="k">from</span> <span class="s">"@praetor/ugc"</span>;
+    <div class="pane" data-pane="ugc"><pre><span class="k">import</span> { defaultRenderer, specFromGoal } <span class="k">from</span> <span class="s">"@kpanks/ugc"</span>;
 
 <span class="k">const</span> r = defaultRenderer({ outDir: <span class="s">"out"</span> });
 <span class="k">await</span> r.render(specFromGoal({

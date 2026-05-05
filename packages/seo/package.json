@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/seo",
+  "name": "@kpanks/seo",
   "version": "0.1.0",
   "description": "Praetor GEO/SEO pack — sitemap, robots, ai.txt, llms.txt, ai:description, og/twitter, JSON-LD (Article/FAQ/Breadcrumb/Org), hreflang, RSS, opensearch, security.txt, humans.txt.",
   "keywords": [

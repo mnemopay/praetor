@@ -1,8 +1,8 @@
 {
-  "name": "@praetor/desktop",
+  "name": "@kpanks/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Praetor Desktop — Electron-wrapped consumer-facing app. Bundles @praetor/api + @praetor/dashboard + headless Chromium. The user downloads one binary and runs charters from a single window.",
+  "description": "Praetor Desktop — Electron-wrapped consumer-facing app. Bundles @kpanks/api + @kpanks/dashboard + headless Chromium. The user downloads one binary and runs charters from a single window.",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
@@ -11,8 +11,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@praetor/api": "*",
-    "@praetor/dashboard": "*"
+    "@kpanks/api": "*",
+    "@kpanks/dashboard": "*"
   },
   "peerDependenciesMeta": {
     "electron": {

@@ -1,5 +1,5 @@
 /**
- * @praetor/3d — Praetor-native image-to-3D + text-to-3D runtime.
+ * @kpanks/3d — Praetor-native image-to-3D + text-to-3D runtime.
  *
  * Per `feedback_praetor_native_tools.md`, the default backend is Microsoft
  * TRELLIS (MIT, image -> GLB mesh + PBR textures) hosted on Replicate. The
@@ -27,7 +27,7 @@
  *   // result.glbUrl, result.previewUrls, result.backend, result.costUsd, result.licenseFamily
  */
 
-import type { ActivityBus } from "@praetor/core";
+import type { ActivityBus } from "@kpanks/core";
 
 export type LicenseFamily = "apache_or_mit" | "proprietary" | "restricted";
 

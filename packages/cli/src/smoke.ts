@@ -27,8 +27,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { Charter } from "@praetor/core";
-import type { ToolDefinition, ToolRegistry } from "@praetor/tools";
+import type { Charter } from "@kpanks/core";
+import type { ToolDefinition, ToolRegistry } from "@kpanks/tools";
 import { buildEnhancedRegistry } from "./index.js";
 
 export type SmokeOutcome = "pass" | "fail" | "skip";

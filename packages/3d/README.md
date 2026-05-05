@@ -1,4 +1,4 @@
-# @praetor/3d
+# @kpanks/3d
 
 Image-to-3D and text-to-3D for Praetor charters. Generate GLB meshes with PBR
 textures from a single photo (or a text prompt) without leaving the runtime.
@@ -11,13 +11,13 @@ sovereign mode, and a `MockThreeDAdapter` ships for tests.
 ## Install
 
 ```bash
-npm install @praetor/3d
+npm install @kpanks/3d
 ```
 
 ## Usage
 
 ```ts
-import { Praetor3D, ReplicateTrellisAdapter } from "@praetor/3d";
+import { Praetor3D, ReplicateTrellisAdapter } from "@kpanks/3d";
 
 const studio = new Praetor3D({
   adapter: new ReplicateTrellisAdapter({ token: process.env.REPLICATE_API_TOKEN! }),

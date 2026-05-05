@@ -1,4 +1,4 @@
-import { ToolRegistry } from "@praetor/tools";
+import { ToolRegistry } from "@kpanks/tools";
 
 /**
  * Web search tool — normalized hits across Brave Search (paid) and the

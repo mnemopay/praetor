@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/vision",
+  "name": "@kpanks/vision",
   "version": "0.1.0",
   "description": "Praetor-native vision tools — screen capture (PraetorScreen) + vision analysis primitives. No third-party screenshot lib in the default codepath.",
   "type": "module",
@@ -11,7 +11,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@praetor/tools": "*"
+    "@kpanks/tools": "*"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

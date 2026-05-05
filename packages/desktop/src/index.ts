@@ -1,5 +1,5 @@
 /**
- * @praetor/desktop — Electron wrapper around @praetor/api + @praetor/dashboard.
+ * @kpanks/desktop — Electron wrapper around @kpanks/api + @kpanks/dashboard.
  *
  * Architecture:
  *
@@ -18,7 +18,7 @@
  * Per `feedback_security_first_doctrine.md`: desktop mode is single-user
  * local-only. The dashboard's createClient shim auto-signs the user in as
  * `dev-user` so they don't see a Supabase login screen. Real multi-user
- * deployment goes through `@praetor/api` directly + a real auth provider.
+ * deployment goes through `@kpanks/api` directly + a real auth provider.
  */
 
 import { createServer } from "node:net";
@@ -33,7 +33,7 @@ export interface BootstrapOptions {
   repoRoot?: string;
   /**
    * Test injection — provide your own factory instead of the real
-   * `@praetor/api` createApp. Lets unit tests verify port selection +
+   * `@kpanks/api` createApp. Lets unit tests verify port selection +
    * env defaulting without spinning up a real server.
    */
   __createApp?: () => { listen: (port: number, host: string, cb: () => void) => Server };
@@ -108,7 +108,7 @@ function tryBind(port: number): Promise<number | null> {
 }
 
 /**
- * Set the env defaults that `@praetor/api` requires at module-load time.
+ * Set the env defaults that `@kpanks/api` requires at module-load time.
  * Desktop mode is single-user local — Supabase isn't actually called for
  * auth (the dashboard's createClient shim auto-signs `dev-user`), but the
  * api's env loader throws if these vars are absent. Stub them with safe
@@ -128,12 +128,12 @@ export async function ensureDesktopEnvDefaults(repoRoot?: string): Promise<void>
 }
 
 async function defaultCreateApp(): Promise<() => { listen: (port: number, host: string, cb: () => void) => Server }> {
-  // Lazy-import @praetor/api so this module stays Electron-free + cheap to
+  // Lazy-import @kpanks/api so this module stays Electron-free + cheap to
   // import in tests that just check pickPort / env defaulting. Indirect the
   // specifier through a variable so tsc doesn't try to resolve the package
   // at compile time (it isn't built yet during composite project graph
   // bootstrap; resolved at runtime via the workspaces symlink).
-  const apiSpec = "@praetor/api";
+  const apiSpec = "@kpanks/api";
   const mod = (await import(apiSpec)) as unknown as { createApp: () => { listen: (port: number, host: string, cb: () => void) => Server } };
   return mod.createApp;
 }

@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { InMemoryActivityBus, type ActivityEvent } from "@praetor/core";
-import { PraetorScreen } from "@praetor/vision";
+import { InMemoryActivityBus, type ActivityEvent } from "@kpanks/core";
+import { PraetorScreen } from "@kpanks/vision";
 import { PraetorComputerSession, noopInputAdapter, type ComputerInputAdapter } from "./session.js";
-import { ToolRegistry } from "@praetor/tools";
+import { ToolRegistry } from "@kpanks/tools";
 import { registerComputerTools } from "./tools.js";
 
 function makeFakeScreen(): { screen: PraetorScreen; pngBytes: Buffer } {

@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/api",
+  "name": "@kpanks/api",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -22,9 +22,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@praetor/cli": "*",
-    "@praetor/core": "*",
-    "@praetor/tools": "*",
+    "@kpanks/cli": "*",
+    "@kpanks/core": "*",
+    "@kpanks/tools": "*",
     "yaml": "^2.5.0"
   },
   "devDependencies": {

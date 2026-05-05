@@ -1,5 +1,5 @@
 /**
- * @praetor/browser — Praetor-native browser agent runtime.
+ * @kpanks/browser — Praetor-native browser agent runtime.
  *
  * DOM-first by default (12–17pp more reliable than vision-driven on the
  * common-task benchmarks per `Stagehand vs Browser Use vs Playwright 2026`).
@@ -9,7 +9,7 @@
  * Chrome DevTools Protocol (the actual standard, not a wrapper of another
  * agent stack). `playwright-core` is the optional peer dep that provides a
  * Node-native CDP client; it lazy-loads on first use, mirroring the
- * KokoroAdapter pattern from `@praetor/voice`.
+ * KokoroAdapter pattern from `@kpanks/voice`.
  *
  * Three usage tiers:
  *
@@ -30,7 +30,7 @@
  * dashboard already renders for coding-agent tools.
  */
 
-import type { ActivityBus } from "@praetor/core";
+import type { ActivityBus } from "@kpanks/core";
 
 export type BrowserBackend = "playwright" | "stagehand" | "browser-use" | "mock";
 

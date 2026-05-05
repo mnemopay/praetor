@@ -1,4 +1,4 @@
-# @praetor/coding-agent
+# @kpanks/coding-agent
 
 Praetor's coding agent. A `NativePraetorEngine` preconfigured with a curated
 tool subset and a system prompt focused on disciplined code changes.
@@ -47,9 +47,9 @@ new CodingAgent({
 ## Usage
 
 ```ts
-import { CodingAgent } from "@praetor/coding-agent";
-import { LlmRouter } from "@praetor/router";
-import { ToolRegistry } from "@praetor/tools";
+import { CodingAgent } from "@kpanks/coding-agent";
+import { LlmRouter } from "@kpanks/router";
+import { ToolRegistry } from "@kpanks/tools";
 
 const router = new LlmRouter();
 const tools = new ToolRegistry();

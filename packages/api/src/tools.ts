@@ -1,6 +1,6 @@
-import { buildEnhancedRegistry } from "@praetor/cli";
-import type { Charter } from "@praetor/core";
-import type { ToolProductionMetadata } from "@praetor/tools";
+import { buildEnhancedRegistry } from "@kpanks/cli";
+import type { Charter } from "@kpanks/core";
+import type { ToolProductionMetadata } from "@kpanks/tools";
 
 export interface ToolCatalogItem {
   name: string;

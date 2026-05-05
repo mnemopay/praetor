@@ -23,12 +23,12 @@ Exercises six different Praetor packages without any LLM provider:
 
 | Step | Tool | Package |
 |---|---|---|
-| 1 | `scrape_url` | `@praetor/scrape` (native fetch + SSRF guard) |
-| 2 | `profile_geo_competitor` | `@praetor/seo` |
-| 3 | `geo_outreach_sequence` | `@praetor/seo` |
-| 4 | `generate_seo_site` | `@praetor/seo` |
-| 5 | `ingest_knowledge` | `@praetor/knowledge` |
-| 6 | `upsert_contact` | `@praetor/business-ops` |
+| 1 | `scrape_url` | `@kpanks/scrape` (native fetch + SSRF guard) |
+| 2 | `profile_geo_competitor` | `@kpanks/seo` |
+| 3 | `geo_outreach_sequence` | `@kpanks/seo` |
+| 4 | `generate_seo_site` | `@kpanks/seo` |
+| 5 | `ingest_knowledge` | `@kpanks/knowledge` |
+| 6 | `upsert_contact` | `@kpanks/business-ops` |
 
 Output:
 - `praetor-out/seo/` — sitemap.xml, robots.txt, ai.txt, llms.txt, schema.jsonld, index/index.html

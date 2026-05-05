@@ -22,7 +22,7 @@ import {
   DefaultWorldGenSelector,
 } from "./index.js";
 
-describe("@praetor/world-gen — selector", () => {
+describe("@kpanks/world-gen — selector", () => {
   beforeEach(() => resetDefaultSelector());
   afterEach(() => resetDefaultSelector());
 

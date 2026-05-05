@@ -3,14 +3,14 @@
 ## Day zero (this commit)
 
 - Monorepo scaffold, TypeScript project references, Vitest.
-- `@praetor/core` — charter schema, mission runtime, Merkle audit.
-- `@praetor/payments` — `MockPayments` (works) + `MnemoPayAdapter` (interface, no
+- `@kpanks/core` — charter schema, mission runtime, Merkle audit.
+- `@kpanks/payments` — `MockPayments` (works) + `MnemoPayAdapter` (interface, no
   hard dep on the SDK yet).
-- `@praetor/agents` — `EchoAgent` (works) + OpenClaw/Hermes adapters (placeholders
+- `@kpanks/agents` — `EchoAgent` (works) + OpenClaw/Hermes adapters (placeholders
   that throw until week 2).
-- `@praetor/design` — interface only.
-- `@praetor/seo` — minimal `renderPage` (works for a basic HTML emit).
-- `@praetor/cli` — `praetor run <charter.yaml>` end-to-end with EchoAgent +
+- `@kpanks/design` — interface only.
+- `@kpanks/seo` — minimal `renderPage` (works for a basic HTML emit).
+- `@kpanks/cli` — `praetor run <charter.yaml>` end-to-end with EchoAgent +
   MockPayments. This is the "functional" bar.
 - `STATE.md` — disk-truth audit so future agents cannot drift undetected.
 
@@ -41,7 +41,7 @@
   user's existing dele-video pipeline.
 - **Hypeframes** binding: charter declares a frame sequence, Praetor emits an
   animated landing-page artifact.
-- `@praetor/seo` upgrade: real markdown renderer, structured data, sitemap
+- `@kpanks/seo` upgrade: real markdown renderer, structured data, sitemap
   rollup, AI-crawler conventions (`ai.txt`, `ai:description`, `llms.txt`).
 
 ## Week 4 — EU AI Act Article 12 mode + distribution

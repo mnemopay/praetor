@@ -1,4 +1,4 @@
-# @praetor/voice
+# @kpanks/voice
 
 Text-to-speech for Praetor charters. Default backend is **Kokoro 82M**
 (Apache 2.0, ONNX, lazy-loaded — no API key, no quota, no network egress).
@@ -9,7 +9,7 @@ non-permissive backends.
 ## Install
 
 ```bash
-npm install @praetor/voice
+npm install @kpanks/voice
 # Optional peer for the Kokoro adapter:
 npm install kokoro-js
 ```
@@ -17,7 +17,7 @@ npm install kokoro-js
 ## Usage
 
 ```ts
-import { PraetorVoice, KokoroAdapter, AzureSpeechAdapter } from "@praetor/voice";
+import { PraetorVoice, KokoroAdapter, AzureSpeechAdapter } from "@kpanks/voice";
 
 const voice = new PraetorVoice();
 voice.attach("kokoro", new KokoroAdapter());

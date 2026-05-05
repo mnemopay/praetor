@@ -37,7 +37,7 @@ import type { BrowserAdapter } from "./index.js";
 export interface SandboxedBrowserAdapterOptions {
   /**
    * The DockerSandbox-equivalent factory. The runtime is supplied by
-   * @praetor/sandbox so this package stays free of a hard sandbox dep.
+   * @kpanks/sandbox so this package stays free of a hard sandbox dep.
    * Adapter implementer: call `sandboxFactory.create()`, get back a
    * Sandbox handle, expose its CDP port via `docker run -p` flag during
    * factory construction, then connect playwright-core via the resulting

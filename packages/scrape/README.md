@@ -1,4 +1,4 @@
-# @praetor/scrape
+# @kpanks/scrape
 
 Native scraping for Praetor charters. SSRF-safe HTTP client by default
 (blocks RFC1918, 169.254.x cloud metadata, link-local, IPv4-mapped
@@ -9,13 +9,13 @@ adapters; the native `fetch` path is the default.
 ## Install
 
 ```bash
-npm install @praetor/scrape
+npm install @kpanks/scrape
 ```
 
 ## Usage
 
 ```ts
-import { Scraper, FetchAdapter } from "@praetor/scrape";
+import { Scraper, FetchAdapter } from "@kpanks/scrape";
 
 const scraper = new Scraper();
 const r = await scraper.scrape({ url: "https://example.com" });

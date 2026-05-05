@@ -1,4 +1,4 @@
-import type { ActivityEvent } from "@praetor/core";
+import type { ActivityEvent } from "@kpanks/core";
 import type { AuthedRequest } from "../auth.js";
 import { authMiddleware } from "../auth.js";
 import { getActivityBus } from "../activity.js";

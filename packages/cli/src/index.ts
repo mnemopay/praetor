@@ -16,34 +16,34 @@ import {
   type ArtifactFormat,
   type Charter,
   type MissionResult,
-} from "@praetor/core";
-import { MockPayments, MnemoPayAdapter, type PaymentsAdapter, type MnemoPayClient } from "@praetor/payments";
-import { EchoAgent, LlmAgent, NativePraetorEngine, CoordinatorAgent, type AgentAdapter } from "@praetor/agents";
-import { registerCodingTools } from "@praetor/coding-agent";
-import { defaultRegistry, type FiscalGate } from "@praetor/tools";
-import { defaultScraper, type ScrapeBackend } from "@praetor/scrape";
-import { chunkText, defaultKnowledgeBase } from "@praetor/knowledge";
-import { DEFAULT_CATALOGUE, LlmRouter, registerDefaultProviders, type RouteRequirements } from "@praetor/router";
-import { DesignPack, type HtmlInCanvas3DSpec, type SplinePresetId } from "@praetor/design";
-import { renderSite, submitIndexNow, extractGeoProfile, analyzeContentSeo, generateOutreachSequence, generateOgImageUrl, type SiteManifest } from "@praetor/seo";
-import { defaultBusinessOps, auditedBusinessOps, type AuditSink } from "@praetor/business-ops";
-import { SysadminModule } from "@praetor/sysadmin";
-import { SandboxDispatcher, MockSandboxFactory, LocalSandboxFactory, DockerSandboxFactory } from "@praetor/sandbox";
-import { capture_screen, analyze_image } from "@praetor/vision";
-import { PraetorVoice, KokoroAdapter, AzureSpeechAdapter, type VoiceBackend } from "@praetor/voice";
-import { PraetorBrowser, PlaywrightAdapter } from "@praetor/browser";
-import { post_x_tweet, post_tiktok_video, schedule_cron_job } from "@praetor/social";
+} from "@kpanks/core";
+import { MockPayments, MnemoPayAdapter, type PaymentsAdapter, type MnemoPayClient } from "@kpanks/payments";
+import { EchoAgent, LlmAgent, NativePraetorEngine, CoordinatorAgent, type AgentAdapter } from "@kpanks/agents";
+import { registerCodingTools } from "@kpanks/coding-agent";
+import { defaultRegistry, type FiscalGate } from "@kpanks/tools";
+import { defaultScraper, type ScrapeBackend } from "@kpanks/scrape";
+import { chunkText, defaultKnowledgeBase } from "@kpanks/knowledge";
+import { DEFAULT_CATALOGUE, LlmRouter, registerDefaultProviders, type RouteRequirements } from "@kpanks/router";
+import { DesignPack, type HtmlInCanvas3DSpec, type SplinePresetId } from "@kpanks/design";
+import { renderSite, submitIndexNow, extractGeoProfile, analyzeContentSeo, generateOutreachSequence, generateOgImageUrl, type SiteManifest } from "@kpanks/seo";
+import { defaultBusinessOps, auditedBusinessOps, type AuditSink } from "@kpanks/business-ops";
+import { SysadminModule } from "@kpanks/sysadmin";
+import { SandboxDispatcher, MockSandboxFactory, LocalSandboxFactory, DockerSandboxFactory } from "@kpanks/sandbox";
+import { capture_screen, analyze_image } from "@kpanks/vision";
+import { PraetorVoice, KokoroAdapter, AzureSpeechAdapter, type VoiceBackend } from "@kpanks/voice";
+import { PraetorBrowser, PlaywrightAdapter } from "@kpanks/browser";
+import { post_x_tweet, post_tiktok_video, schedule_cron_job } from "@kpanks/social";
 import {
   defaultSelector as worldGenSelector,
   generate_3d_model as worldGenModel,
   generate_3d_world as worldGenWorld,
   edit_3d_scene as worldGenEdit,
   publish_3d_scene as worldGenPublish,
-} from "@praetor/world-gen";
-import { defaultRenderer } from "@praetor/game-assets";
+} from "@kpanks/world-gen";
+import { defaultRenderer } from "@kpanks/game-assets";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import type { ToolApproval, ToolOrigin, ToolProductionState, ToolRisk, ToolSandbox } from "@praetor/tools";
+import type { ToolApproval, ToolOrigin, ToolProductionState, ToolRisk, ToolSandbox } from "@kpanks/tools";
 
 const ACTIVITY_PREFIX = "::praetor-activity::";
 
@@ -313,7 +313,7 @@ export async function buildEnhancedRegistry(charter: Charter, missionId: string,
     }
   );
 
-  // ---- @praetor/world-gen — native Mint replacement ---------------------
+  // ---- @kpanks/world-gen — native Mint replacement ---------------------
   // Selector resolves a backend at call time from env (HUNYUAN3D_ENDPOINT,
   // REPLICATE_API_TOKEN, TRIPO_API_KEY, FAL_API_KEY, WORLDLABS_API_KEY,
   // HYWORLD_ENDPOINT). Falls back to a deterministic mock so smoke tests pass
@@ -1283,7 +1283,7 @@ async function cmdServe(args: string[]): Promise<void> {
 
   // Dynamic import avoids a circular tsconfig project reference (api→cli→api).
   // The import is typed via an explicit interface so the compiler is satisfied
-  // without needing @praetor/api in the references array.
+  // without needing @kpanks/api in the references array.
   interface ApiLib {
     createApp(): {
       listen(port: number, host: string, cb: () => void): { close(cb: () => void): void };
@@ -1292,7 +1292,7 @@ async function cmdServe(args: string[]): Promise<void> {
   }
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore — runtime-only dep; no tsconfig reference to avoid api↔cli cycle
-  const { createApp, env } = await import("@praetor/api/lib") as unknown as ApiLib;
+  const { createApp, env } = await import("@kpanks/api/lib") as unknown as ApiLib;
   const app = createApp();
   const portArg = flag(args, "--port");
   const port = portArg ? Number(portArg) : env.port;

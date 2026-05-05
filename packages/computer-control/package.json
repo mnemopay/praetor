@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/computer-control",
+  "name": "@kpanks/computer-control",
   "version": "0.1.0",
   "description": "Praetor-native computer-use session: PraetorScreen capture + audit + activity-bus streaming, with a pluggable input adapter slot for click/type/scroll/hotkey.",
   "type": "module",
@@ -10,9 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@praetor/tools": "*",
-    "@praetor/core": "*",
-    "@praetor/vision": "*"
+    "@kpanks/tools": "*",
+    "@kpanks/core": "*",
+    "@kpanks/vision": "*"
   },
   "license": "Apache-2.0",
   "repository": {

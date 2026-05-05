@@ -1,13 +1,13 @@
-# @praetor/sdk
+# @kpanks/sdk
 
 Aggregate SDK for the Praetor API economy. Re-exports the most common
 package surfaces so a downstream consumer can `import { … } from
-"@praetor/sdk"` without picking through every namespaced package.
+"@kpanks/sdk"` without picking through every namespaced package.
 
 ## Install
 
 ```bash
-npm install @praetor/sdk
+npm install @kpanks/sdk
 ```
 
 ## Usage
@@ -19,11 +19,11 @@ import {
   PraetorVoice,
   Scraper,
   Article12AuditChain,
-} from "@praetor/sdk";
+} from "@kpanks/sdk";
 ```
 
 For fine-grained control / smaller bundles, depend on the individual
-packages directly (`@praetor/browser`, `@praetor/scrape`, etc.).
+packages directly (`@kpanks/browser`, `@kpanks/scrape`, etc.).
 
 ## License
 

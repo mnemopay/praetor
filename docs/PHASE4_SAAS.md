@@ -43,7 +43,7 @@ This document describes the SaaS economy layer introduced in Phase 4.
 1. Copy `packages/dashboard/.env.example` to `packages/dashboard/.env`.
 2. Fill in `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_BASE_URL`.
 3. Run:
-   - `npm run dev --workspace @praetor/dashboard`
+   - `npm run dev --workspace @kpanks/dashboard`
 
 ## Deployment
 

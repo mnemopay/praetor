@@ -5,7 +5,7 @@
 </div>
 
 ```bash
-npm install -g @praetor/cli
+npm install -g @kpanks/cli
 PRAETOR_DEV_MODE=1 ANTHROPIC_API_KEY=sk-ant-... praetor serve
 ```
 
@@ -21,28 +21,28 @@ The runtime is 25 packages, **489 tests passing across 41 test files**.
 
 | Capability | Package | Status |
 |---|---|---|
-| Multi-LLM routing with prompt caching + Batch API | `@praetor/router` | Production |
-| Charter schema, mission lifecycle, Merkle audit, Article 12 bundle | `@praetor/core` | Production |
-| HTTP api server (PraetorHTTP, no Express) + dashboard SSE | `@praetor/api` | Production |
-| Web dashboard with chat-back UX | `@praetor/dashboard` | Production |
-| Coding agent — 16 tools incl. `apply_edit`, `repo_map`, `find_symbol`, `load_conventions`, `git_*`, `run_tests` | `@praetor/coding-agent` | Production |
-| DOM-first browser automation (lazy `playwright-core`, Stagehand-shaped a11y outline) | `@praetor/browser` | Production |
-| Sandbox factory — Mock / Local / **Docker (hardened)** / Firecracker stub | `@praetor/sandbox` | Production |
-| Native voice / TTS — Kokoro 82M default + Azure Speech, license-family enforceable | `@praetor/voice` | Production |
-| Screen capture — native PowerShell / `screencapture` / grim | `@praetor/vision` | Production |
-| Computer-use session — audit + activity-bus streaming | `@praetor/computer-control` | Production |
-| Scrape — native fetch + SSRF guard + JSON-LD + sitemap + X.com syndication | `@praetor/scrape` | Production |
-| Payments — MnemoPay HoldId / Settle / Release pattern | `@praetor/payments` | Production |
-| MCP server + client (allow/deny tools, oversize guards) | `@praetor/mcp` | Production |
-| Knowledge base — vector + chunking | `@praetor/knowledge` | Production |
-| SEO / GEO emit — sitemap, robots, ai.txt, llms.txt, JSON-LD | `@praetor/seo` | Production |
-| Design pack — PraetorScene → 9 native render targets incl. Remotion, Hyperframes, Three.js, **claude-skill bundle** | `@praetor/design` | Production |
-| UGC video pipeline — portrait → motion (Sora 2 / Luma / Hedra / Seedance) → voice → ffmpeg | `@praetor/ugc` | Production |
-| 3D world gen — TRELLIS / Hunyuan / Tripo / fal-sam / HY-World / Marble routing | `@praetor/world-gen` | Production |
-| Web-native game engine — single-file HTML 2D + Three.js 3D + AABB physics + camera-follow | `@praetor/game` | Production |
-| Godot 4.4 scaffolder | `@praetor/game-assets` | Production |
-| Praetor Desktop (Electron wrapper) | `@praetor/desktop` | Scaffold |
-| Browser-in-Docker | `@praetor/browser/sandboxed` | Scaffold |
+| Multi-LLM routing with prompt caching + Batch API | `@kpanks/router` | Production |
+| Charter schema, mission lifecycle, Merkle audit, Article 12 bundle | `@kpanks/core` | Production |
+| HTTP api server (PraetorHTTP, no Express) + dashboard SSE | `@kpanks/api` | Production |
+| Web dashboard with chat-back UX | `@kpanks/dashboard` | Production |
+| Coding agent — 16 tools incl. `apply_edit`, `repo_map`, `find_symbol`, `load_conventions`, `git_*`, `run_tests` | `@kpanks/coding-agent` | Production |
+| DOM-first browser automation (lazy `playwright-core`, Stagehand-shaped a11y outline) | `@kpanks/browser` | Production |
+| Sandbox factory — Mock / Local / **Docker (hardened)** / Firecracker stub | `@kpanks/sandbox` | Production |
+| Native voice / TTS — Kokoro 82M default + Azure Speech, license-family enforceable | `@kpanks/voice` | Production |
+| Screen capture — native PowerShell / `screencapture` / grim | `@kpanks/vision` | Production |
+| Computer-use session — audit + activity-bus streaming | `@kpanks/computer-control` | Production |
+| Scrape — native fetch + SSRF guard + JSON-LD + sitemap + X.com syndication | `@kpanks/scrape` | Production |
+| Payments — MnemoPay HoldId / Settle / Release pattern | `@kpanks/payments` | Production |
+| MCP server + client (allow/deny tools, oversize guards) | `@kpanks/mcp` | Production |
+| Knowledge base — vector + chunking | `@kpanks/knowledge` | Production |
+| SEO / GEO emit — sitemap, robots, ai.txt, llms.txt, JSON-LD | `@kpanks/seo` | Production |
+| Design pack — PraetorScene → 9 native render targets incl. Remotion, Hyperframes, Three.js, **claude-skill bundle** | `@kpanks/design` | Production |
+| UGC video pipeline — portrait → motion (Sora 2 / Luma / Hedra / Seedance) → voice → ffmpeg | `@kpanks/ugc` | Production |
+| 3D world gen — TRELLIS / Hunyuan / Tripo / fal-sam / HY-World / Marble routing | `@kpanks/world-gen` | Production |
+| Web-native game engine — single-file HTML 2D + Three.js 3D + AABB physics + camera-follow | `@kpanks/game` | Production |
+| Godot 4.4 scaffolder | `@kpanks/game-assets` | Production |
+| Praetor Desktop (Electron wrapper) | `@kpanks/desktop` | Scaffold |
+| Browser-in-Docker | `@kpanks/browser/sandboxed` | Scaffold |
 
 ---
 
@@ -83,7 +83,7 @@ See [`DEPLOY.md`](./DEPLOY.md) for the full security doctrine.
 
 Structured JSON logs ship by default — every runtime event is a JSON line on stdout/stderr, so `grep`, `jq`, and any log aggregator work out of the box.
 
-- `log.info` / `log.error` are available from `import { log } from "@praetor/core"` — no wiring needed.
+- `log.info` / `log.error` are available from `import { log } from "@kpanks/core"` — no wiring needed.
 - Set `SENTRY_DSN` in the environment and a `SentrySink` is auto-wired: `info`/`warn` become Sentry breadcrumbs, `error` calls `captureMessage`.
 - Field redaction matches the audit-log redactor — `api_key`, `token`, `secret`, `password`, `auth` are scrubbed before any sink sees them.
 - `PRAETOR_LOG_LEVEL=debug|info|warn|error` controls verbosity (default: `info`).
@@ -94,7 +94,7 @@ Structured JSON logs ship by default — every runtime event is a JSON line on s
 
 ```bash
 # Install
-npm install -g @praetor/cli
+npm install -g @kpanks/cli
 
 # Dev mode — no Supabase, no DB, in-memory
 PRAETOR_DEV_MODE=1 ANTHROPIC_API_KEY=sk-ant-... praetor serve

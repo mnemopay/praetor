@@ -1,6 +1,6 @@
 ﻿// Live smoke test for World Labs Marble. Calls generate_3d_world once with
 // detail=draft (~$0.18, ~230 credits) and prints the resulting manifest.
-import { generate_3d_world, defaultSelector } from "@praetor/world-gen";
+import { generate_3d_world, defaultSelector } from "@kpanks/world-gen";
 
 const args = {
   prompt: "a quiet forest clearing at dawn, low-poly stylized, soft fog, distant pine trees",

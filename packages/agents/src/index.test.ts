@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { NativePraetorEngine } from "./index.js";
-import type { LlmRouter } from "@praetor/router";
-import { ToolRegistry } from "@praetor/tools";
+import type { LlmRouter } from "@kpanks/router";
+import { ToolRegistry } from "@kpanks/tools";
 
 describe("NativePraetorEngine", () => {
   it("enforces tool role allowlists for deterministic charter steps", async () => {

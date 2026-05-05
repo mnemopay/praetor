@@ -1,5 +1,5 @@
 /**
- * @praetor/router — declarative LLM router.
+ * @kpanks/router — declarative LLM router.
  *
  * A charter declares its requirements:
  *   route: { quality: "high" | "fast", maxUsdPer1K: 5, sovereign: true, contextK: 128 }

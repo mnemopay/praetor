@@ -1,4 +1,4 @@
-# @praetor/browser
+# @kpanks/browser
 
 DOM-first browser agent runtime for Praetor charters. Spawns / drives a real
 Chromium via Chrome DevTools Protocol, returns a token-efficient compressed
@@ -8,7 +8,7 @@ events on the charter's ActivityBus.
 ## Install
 
 ```bash
-npm install @praetor/browser
+npm install @kpanks/browser
 # Optional peer for the Playwright adapter:
 npm install playwright-core
 ```
@@ -16,7 +16,7 @@ npm install playwright-core
 ## Usage
 
 ```ts
-import { PraetorBrowser, PlaywrightAdapter } from "@praetor/browser";
+import { PraetorBrowser, PlaywrightAdapter } from "@kpanks/browser";
 
 const browser = new PraetorBrowser();
 browser.attachAdapter(new PlaywrightAdapter());

@@ -1,4 +1,4 @@
-import type { Sandbox } from "@praetor/sandbox";
+import type { Sandbox } from "@kpanks/sandbox";
 
 export class SysadminModule {
   constructor(private sandbox?: Sandbox) {}

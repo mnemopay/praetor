@@ -1,8 +1,8 @@
-import { ToolRegistry } from "@praetor/tools";
-import { FetchAdapter } from "@praetor/scrape";
+import { ToolRegistry } from "@kpanks/tools";
+import { FetchAdapter } from "@kpanks/scrape";
 
 /**
- * fetch_url — wrapper around @praetor/scrape's FetchAdapter so the
+ * fetch_url — wrapper around @kpanks/scrape's FetchAdapter so the
  * research agent can pull primary sources without standing up its own
  * HTTP client. Returns plain text + JSON-LD when present.
  */

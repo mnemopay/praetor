@@ -5,13 +5,13 @@ before running the publish workflow.
 
 ## Why this doc exists
 
-`@praetor/cli` depends on 19 sibling `@praetor/*` packages. The current
+`@kpanks/cli` depends on 19 sibling `@kpanks/*` packages. The current
 `package.json` declarations use `"*"` as the version specifier, which
 means "any published version." That works at install time, but it has
 two caveats:
 
-1. **Every transitive dep must already be published.** If `@praetor/cli`
-   ships before `@praetor/browser` is on npm, `npm install -g @praetor/cli`
+1. **Every transitive dep must already be published.** If `@kpanks/cli`
+   ships before `@kpanks/browser` is on npm, `npm install -g @kpanks/cli`
    will fail.
 2. **Reproducibility.** `"*"` resolves to whatever's latest at install
    time. Two installs a month apart can produce different runtimes.
@@ -26,58 +26,58 @@ canonical "what worked together."
 When publishing the workspace, order matters. Each row depends only on
 rows above it.
 
-### Tier 0 — leaves (no `@praetor/*` deps)
+### Tier 0 — leaves (no `@kpanks/*` deps)
 
-- `@praetor/core`
-- `@praetor/tools`
-- `@praetor/scrape`
-- `@praetor/knowledge`
-- `@praetor/router`
-- `@praetor/seo`
-- `@praetor/design`
-- `@praetor/social`
-- `@praetor/game`
+- `@kpanks/core`
+- `@kpanks/tools`
+- `@kpanks/scrape`
+- `@kpanks/knowledge`
+- `@kpanks/router`
+- `@kpanks/seo`
+- `@kpanks/design`
+- `@kpanks/social`
+- `@kpanks/game`
 
 ### Tier 1 — depend on tier 0 only
 
-- `@praetor/payments` (→ tools, possibly core)
-- `@praetor/agents` (→ core, tools)
-- `@praetor/sandbox` (→ tools)
-- `@praetor/business-ops` (→ tools)
-- `@praetor/game-assets` (→ tools)
-- `@praetor/world-gen` (→ tools)
-- `@praetor/vision` (→ tools)
-- `@praetor/voice` (→ tools)
-- `@praetor/mcp` (→ tools)
+- `@kpanks/payments` (→ tools, possibly core)
+- `@kpanks/agents` (→ core, tools)
+- `@kpanks/sandbox` (→ tools)
+- `@kpanks/business-ops` (→ tools)
+- `@kpanks/game-assets` (→ tools)
+- `@kpanks/world-gen` (→ tools)
+- `@kpanks/vision` (→ tools)
+- `@kpanks/voice` (→ tools)
+- `@kpanks/mcp` (→ tools)
 
 ### Tier 2
 
-- `@praetor/sysadmin` (→ sandbox)
-- `@praetor/computer-control` (→ tools, core, vision)
-- `@praetor/browser` (→ core, tools, vision)
-- `@praetor/coding-agent` (→ agents, core, router, tools)
-- `@praetor/research-agent` (→ tools, scrape)
-- `@praetor/ugc` (→ tools, design)
+- `@kpanks/sysadmin` (→ sandbox)
+- `@kpanks/computer-control` (→ tools, core, vision)
+- `@kpanks/browser` (→ core, tools, vision)
+- `@kpanks/coding-agent` (→ agents, core, router, tools)
+- `@kpanks/research-agent` (→ tools, scrape)
+- `@kpanks/ugc` (→ tools, design)
 
 ### Tier 3
 
-- `@praetor/api` (→ core, cli, tools)
-- `@praetor/sdk` (→ aggregator)
+- `@kpanks/api` (→ core, cli, tools)
+- `@kpanks/sdk` (→ aggregator)
 
 ### Tier 4
 
-- `@praetor/cli` — depends on everything
+- `@kpanks/cli` — depends on everything
 
-### Special: `@praetor/desktop`
+### Special: `@kpanks/desktop`
 
-- Depends on `@praetor/api` + `@praetor/dashboard`. Currently a scaffold
+- Depends on `@kpanks/api` + `@kpanks/dashboard`. Currently a scaffold
   with no Electron binary builds wired. Don't publish until the
   Electron-builder pipeline lands.
 
 ## Publish a single package
 
 The CI workflow at `.github/workflows/publish.yml` accepts the package
-name (without the `@praetor/` prefix) and an npm dist-tag:
+name (without the `@kpanks/` prefix) and an npm dist-tag:
 
 ```bash
 gh workflow run publish.yml -f package=router -f tag=latest
@@ -116,14 +116,14 @@ for pkg in core tools scrape knowledge router seo design social game \
            api sdk cli; do
   gh workflow run publish.yml -f package=$pkg -f tag=latest
   echo "Waiting for $pkg to land on npm..."
-  while ! npm view @praetor/$pkg@0.2.0 version > /dev/null 2>&1; do sleep 10; done
+  while ! npm view @kpanks/$pkg@0.2.0 version > /dev/null 2>&1; do sleep 10; done
 done
 ```
 
 This loop respects dependency order and waits for each package to
 appear on npm before publishing the next.
 
-## Concrete versions in `@praetor/cli`
+## Concrete versions in `@kpanks/cli`
 
 Today, the cli's `package.json` uses `"*"` for every workspace dep.
 Before the first npm publish:
@@ -145,8 +145,8 @@ The current state is option A.
 - `1.0` — first stable. Once a public consumer ships against `1.0`, we
   freeze the public API and breaking changes go to `2.0`.
 - `next` dist-tag — preview / preview / release-candidate builds.
-  Consumers opt in with `npm install @praetor/cli@next`.
-- `latest` dist-tag — production. What `npm install @praetor/cli`
+  Consumers opt in with `npm install @kpanks/cli@next`.
+- `latest` dist-tag — production. What `npm install @kpanks/cli`
   resolves to.
 
 ## Provenance
@@ -156,17 +156,17 @@ GitHub's OIDC to attest that the published artifact came from this
 repo at this commit. Verify on npm:
 
 ```bash
-npm view @praetor/cli --json | jq '.dist["npm-signature"]'
+npm view @kpanks/cli --json | jq '.dist["npm-signature"]'
 ```
 
 ## Rolling back a bad release
 
 ```bash
 # 1. Move the dist-tag away from the bad version
-npm dist-tag add @praetor/<pkg>@<previous-version> latest
+npm dist-tag add @kpanks/<pkg>@<previous-version> latest
 
 # 2. (Optional) Deprecate the bad version
-npm deprecate @praetor/<pkg>@<bad-version> "use <previous-version>"
+npm deprecate @kpanks/<pkg>@<bad-version> "use <previous-version>"
 
 # 3. NEVER `npm unpublish` after 72 hours. npm forbids it for packages
 #    other consumers depend on. Ship a patch instead.
@@ -174,12 +174,12 @@ npm deprecate @praetor/<pkg>@<bad-version> "use <previous-version>"
 
 ## Pre-launch checklist
 
-Before the first `@praetor/cli` publish:
+Before the first `@kpanks/cli` publish:
 
 - [ ] All 19 sibling packages have shipped tier 0 → tier 3 successfully
 - [ ] The cli's `package.json` `"*"` deps are replaced with concrete versions matching the published siblings
 - [ ] `package-lock.json` reflects the concrete versions
 - [ ] `npm install -g .` from `packages/cli/` works locally before publish
-- [ ] `praetor doctor` runs cleanly against a fresh `npm install -g @praetor/cli@<candidate-version>`
+- [ ] `praetor doctor` runs cleanly against a fresh `npm install -g @kpanks/cli@<candidate-version>`
 - [ ] CHANGELOG entry written for the cli's version
 - [ ] README's "Quick start" command still produces a working `praetor serve`

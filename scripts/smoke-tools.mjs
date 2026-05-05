@@ -15,14 +15,14 @@
 const args = process.argv.slice(2);
 const runSafe = args.includes("--run-safe");
 
-const cli = await import("@praetor/cli").catch((err) => {
-  console.error("Could not import @praetor/cli. Run `npm run build` first.");
+const cli = await import("@kpanks/cli").catch((err) => {
+  console.error("Could not import @kpanks/cli. Run `npm run build` first.");
   console.error(err.message);
   process.exit(1);
 });
 
 if (typeof cli.buildEnhancedRegistry !== "function") {
-  console.error("@praetor/cli does not export buildEnhancedRegistry. Rebuild after pulling.");
+  console.error("@kpanks/cli does not export buildEnhancedRegistry. Rebuild after pulling.");
   process.exit(1);
 }
 
@@ -78,7 +78,7 @@ const safeProbes = [
     name: "list_dir",
     input: { path: process.cwd() },
   },
-  // ─── @praetor/world-gen probes ───────────────────────────────────────────
+  // ─── @kpanks/world-gen probes ───────────────────────────────────────────
   // edit_3d_scene is pure-sync (just emits a SuperSplat deep link).
   {
     name: "edit_3d_scene",

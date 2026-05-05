@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/agents",
+  "name": "@kpanks/agents",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,7 +11,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@praetor/router": "*"
+    "@kpanks/router": "*"
   },
   "author": "J&B Enterprise LLC <jeremiah@getbizsuite.com>",
   "license": "Apache-2.0",

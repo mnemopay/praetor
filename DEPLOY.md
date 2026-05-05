@@ -9,13 +9,13 @@ deploy, start here. If you're updating an existing one, check the
 
 | Surface | Lives at | Builds from | Rolls out via |
 |---|---|---|---|
-| npm packages | `npmjs.com/package/@praetor/<name>` | each `packages/<name>` | `gh workflow run publish.yml -f package=<name> -f tag=latest` |
+| npm packages | `npmjs.com/package/@kpanks/<name>` | each `packages/<name>` | `gh workflow run publish.yml -f package=<name> -f tag=latest` |
 | `praetor-api` | `praetor-api.fly.dev` (target) | repo-root `Dockerfile` | `fly deploy --remote-only --dockerfile ../../Dockerfile` from `packages/api` |
 | Praetor Desktop | per-user installs | `packages/desktop` (scaffold) | `electron-builder` (not yet wired — see `packages/desktop/README.md`) |
 | MnemoPay MCP | `mnemopay-mcp.fly.dev` | a separate repo (`mnemopay-sdk/`) | covered in `mnemopay-sdk/CLAUDE.md` — not Praetor's deploy story |
 
 Praetor's repo only owns the first three rows. The MnemoPay MCP server is
-listed for cross-reference because Praetor's `@praetor/payments` adapter
+listed for cross-reference because Praetor's `@kpanks/payments` adapter
 calls it.
 
 ## CI
@@ -32,7 +32,7 @@ calls it.
 ## Publishing an npm package
 
 The publish workflow takes a single input — the package name minus the
-`@praetor/` prefix — and pushes that one package to npm.
+`@kpanks/` prefix — and pushes that one package to npm.
 
 ```bash
 gh workflow run publish.yml -f package=browser -f tag=latest
@@ -49,18 +49,18 @@ Pre-flight automatic checks:
 `tag=latest` for production releases.
 
 Currently publishable packages (13):
-- `@praetor/browser`, `@praetor/computer-control`, `@praetor/core`,
-  `@praetor/design`, `@praetor/game-assets`, `@praetor/scrape`,
-  `@praetor/sdk`, `@praetor/seo`, `@praetor/social`, `@praetor/ugc`,
-  `@praetor/vision`, `@praetor/voice`, `@praetor/world-gen`.
+- `@kpanks/browser`, `@kpanks/computer-control`, `@kpanks/core`,
+  `@kpanks/design`, `@kpanks/game-assets`, `@kpanks/scrape`,
+  `@kpanks/sdk`, `@kpanks/seo`, `@kpanks/social`, `@kpanks/ugc`,
+  `@kpanks/vision`, `@kpanks/voice`, `@kpanks/world-gen`.
 
-If you want to publish a workspace-private package (e.g. `@praetor/cli`),
+If you want to publish a workspace-private package (e.g. `@kpanks/cli`),
 flip its `private` field first and double-check `publishConfig.access`.
 
 ## Self-hosting the api server (Docker)
 
 The repo-root `Dockerfile` is multi-stage and builds the entire
-workspace. The runtime image runs `@praetor/api` on port `8788`.
+workspace. The runtime image runs `@kpanks/api` on port `8788`.
 
 ```bash
 docker build -t praetor:latest .
@@ -117,7 +117,7 @@ The `packages/desktop` scaffold is in the repo, but binary builds are
 not wired yet. To run it locally:
 
 ```bash
-npm install electron --workspace=@praetor/desktop --save-dev
+npm install electron --workspace=@kpanks/desktop --save-dev
 npx tsc -b
 cd packages/desktop && npx electron dist/main.js
 ```
@@ -139,7 +139,7 @@ as the v1 ship gap.
   the runtime image — install it explicitly inside any container that
   needs the `browser_*` tools, or schedule those charters to a separate
   worker pool. The longer-term fix is the `SandboxedBrowserAdapter`
-  scaffold under `@praetor/browser/src/sandboxed.ts`.
+  scaffold under `@kpanks/browser/src/sandboxed.ts`.
 - **Voice**: same pattern as browser. `kokoro-js` is a peer dep; install
   in containers that need `voice_synthesize`. Azure Speech adapter has
   no peer install — just env keys.
@@ -150,7 +150,7 @@ as the v1 ship gap.
 
 ## Rollback
 
-- npm packages: `npm dist-tag add @praetor/<pkg>@<previous-version> latest`
+- npm packages: `npm dist-tag add @kpanks/<pkg>@<previous-version> latest`
 - Fly: `fly releases` → pick a previous version → `fly releases rollback <version>`
 - Docker: every build is tagged; pin to a SHA in production
   (`praetor:sha-<commit>`) and update via your orchestrator.

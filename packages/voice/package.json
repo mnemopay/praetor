@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/voice",
+  "name": "@kpanks/voice",
   "version": "0.1.0",
   "description": "Praetor-native text-to-speech runtime. Default backend is Kokoro 82M (Apache 2.0, ONNX, lazy-loaded). Azure Speech, Edge TTS, ElevenLabs, OpenAI TTS, fal-tts, OpenVoice v2 cloning available as opt-in adapters.",
   "keywords": [
@@ -43,7 +43,7 @@
   },
   "author": "J&B Enterprise LLC <jeremiah@getbizsuite.com>",
   "dependencies": {
-    "@praetor/tools": "*"
+    "@kpanks/tools": "*"
   },
   "peerDependenciesMeta": {
     "kokoro-js": {

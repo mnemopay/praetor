@@ -1,5 +1,5 @@
 /**
- * @praetor/coding-agent — Praetor's coding agent.
+ * @kpanks/coding-agent — Praetor's coding agent.
  *
  * Provides a curated tool subset (file ops, git, tests, command exec)
  * preregistered with the role gate `coding`, so the LLM only sees the
@@ -7,7 +7,7 @@
  *
  * Usage:
  *
- *     import { CodingAgent } from "@praetor/coding-agent";
+ *     import { CodingAgent } from "@kpanks/coding-agent";
  *     const agent = new CodingAgent({
  *       repoRoot: "/abs/path/to/repo",
  *       router, tools, toolContext, policy,
@@ -18,10 +18,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { NativePraetorEngine, type AgentRunInput, type AgentRunResult } from "@praetor/agents";
-import type { LlmRouter, RouteRequirements } from "@praetor/router";
-import { ToolRegistry, type ToolCallContext } from "@praetor/tools";
-import type { PolicyEngine } from "@praetor/core";
+import { NativePraetorEngine, type AgentRunInput, type AgentRunResult } from "@kpanks/agents";
+import type { LlmRouter, RouteRequirements } from "@kpanks/router";
+import { ToolRegistry, type ToolCallContext } from "@kpanks/tools";
+import type { PolicyEngine } from "@kpanks/core";
 
 import { registerFileTools } from "./tools/file_tools.js";
 import { registerGitTools } from "./tools/git_tools.js";

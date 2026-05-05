@@ -1,19 +1,19 @@
-# @praetor/game-assets
+# @kpanks/game-assets
 
 > One spec → runnable Godot 4.4 project. Sprites, textures, music, SFX, scene tree, controller stub.
 
-Charter-driven game-asset pipeline for Praetor. Same adapter contract as `@praetor/ugc` — every stage has a paid backend (best quality) and a zero-cost fallback so a charter can keep running when API credits are exhausted.
+Charter-driven game-asset pipeline for Praetor. Same adapter contract as `@kpanks/ugc` — every stage has a paid backend (best quality) and a zero-cost fallback so a charter can keep running when API credits are exhausted.
 
 ## Install
 
 ```bash
-npm i @praetor/game-assets
+npm i @kpanks/game-assets
 ```
 
 ## Quick start
 
 ```ts
-import { defaultRenderer, specFromGoal } from "@praetor/game-assets";
+import { defaultRenderer, specFromGoal } from "@kpanks/game-assets";
 
 const r = defaultRenderer({ outDir: "out" });
 const result = await r.render(
@@ -75,7 +75,7 @@ Open the folder in Godot 4.4 → press F5 → playable.
 ## Custom adapters
 
 ```ts
-import { GameAssetsRendererImpl } from "@praetor/game-assets";
+import { GameAssetsRendererImpl } from "@kpanks/game-assets";
 
 const r = new GameAssetsRendererImpl({
   concept: { "openai-image": myOpenAIAdapter },

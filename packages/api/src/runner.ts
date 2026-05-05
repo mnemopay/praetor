@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { stringify } from "yaml";
 import { env } from "./env.js";
 import { appendMissionLog, updateMissionStatus } from "./db.js";
-import type { ActivityEvent, Charter } from "@praetor/core";
+import type { ActivityEvent, Charter } from "@kpanks/core";
 import { getActivityBus } from "./activity.js";
 
 /**
@@ -49,7 +49,7 @@ const ACTIVITY_PREFIX = "::praetor-activity::";
 export function toYaml(charter: Charter): string {
   return stringify({
     ...charter,
-    plugins: charter.plugins && charter.plugins.length > 0 ? charter.plugins : ["@praetor/seo"],
+    plugins: charter.plugins && charter.plugins.length > 0 ? charter.plugins : ["@kpanks/seo"],
   });
 }
 

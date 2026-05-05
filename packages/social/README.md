@@ -1,4 +1,4 @@
-# @praetor/social
+# @kpanks/social
 
 Social-media tooling for Praetor charters. Cross-platform post drafting,
 scheduling primitives, and platform-specific size/length validation
@@ -7,13 +7,13 @@ scheduling primitives, and platform-specific size/length validation
 ## Install
 
 ```bash
-npm install @praetor/social
+npm install @kpanks/social
 ```
 
 ## Usage
 
 ```ts
-import { drafts, validate } from "@praetor/social";
+import { drafts, validate } from "@kpanks/social";
 
 const draft = drafts.compose({
   text: "Linger.chat is live in DFW.",

@@ -14,8 +14,8 @@
  * hooks via the `wrap` parameter.
  */
 
-import type { ActivityBus, ActivityEvent } from "@praetor/core";
-import type { ToolCallContext } from "@praetor/tools";
+import type { ActivityBus, ActivityEvent } from "@kpanks/core";
+import type { ToolCallContext } from "@kpanks/tools";
 
 export interface CreateActivityToolContextInput {
   missionId: string;

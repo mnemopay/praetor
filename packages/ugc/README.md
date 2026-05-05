@@ -1,9 +1,9 @@
-# @praetor/ugc
+# @kpanks/ugc
 
 Portrait → motion → voiceover → composite. One spec, four stages, real backends.
 
 ```
-npm install @praetor/ugc
+npm install @kpanks/ugc
 ```
 
 ## Backends
@@ -26,7 +26,7 @@ npm install @praetor/ugc
 ## Quick start
 
 ```ts
-import { defaultRenderer, specFromGoal } from "@praetor/ugc";
+import { defaultRenderer, specFromGoal } from "@kpanks/ugc";
 
 const renderer = defaultRenderer();
 const result = await renderer.render(
@@ -44,7 +44,7 @@ unavailable rather than crashing at import time.
 ## Zero-cost path
 
 ```ts
-import { MockUgcRenderer, specFromGoal } from "@praetor/ugc";
+import { MockUgcRenderer, specFromGoal } from "@kpanks/ugc";
 const r = new MockUgcRenderer();
 await r.render(specFromGoal({ id: "free", goal: "free ads" }));
 // uses reuse + kenburns + edge-tts → costUsd = 0

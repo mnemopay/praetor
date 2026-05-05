@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/social",
+  "name": "@kpanks/social",
   "version": "0.1.0",
   "description": "Praetor Social Media Tools",
   "type": "module",
@@ -11,7 +11,7 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@praetor/tools": "*"
+    "@kpanks/tools": "*"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

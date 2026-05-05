@@ -1,4 +1,4 @@
-import { publish_3d_scene } from "@praetor/world-gen";
+import { publish_3d_scene } from "@kpanks/world-gen";
 
 const result = publish_3d_scene({
   id: "forest-clearing-01",

@@ -129,9 +129,9 @@ export type AuditHook = (event: WorldGenAuditEvent) => void;
 /* ---------- activity bus (optional) ---------- */
 
 /**
- * Structural subset of `@praetor/core`'s `ActivityBus`. Defined locally so
+ * Structural subset of `@kpanks/core`'s `ActivityBus`. Defined locally so
  * world-gen does not depend on core. The runtime passes the real bus from
- * `@praetor/core` and the shapes match.
+ * `@kpanks/core` and the shapes match.
  */
 export type WorldGenActivityEvent =
   | { kind: "tool.start"; missionId: string; eventId: string; toolName: string; args: unknown; ts: string }

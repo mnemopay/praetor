@@ -185,7 +185,7 @@ export function createApp(): PraetorApp {
     });
   });
 
-  // ─── World-gen: list and serve scenes published via @praetor/world-gen ──────
+  // ─── World-gen: list and serve scenes published via @kpanks/world-gen ──────
   const worldGenRoot = resolve(env.worldGenOutDir ?? join(env.repoRoot, "praetor-out", "scenes"));
 
   app.get("/api/v1/world-gen/scenes", (_req, res) => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildEnhancedRegistry } from "./index.js";
-import { validateCharter } from "@praetor/core";
+import { validateCharter } from "@kpanks/core";
 
 describe("Praetor runtime registry", () => {
   it("declares production metadata for every built-in runtime tool", async () => {

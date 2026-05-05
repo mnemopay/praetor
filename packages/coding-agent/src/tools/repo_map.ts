@@ -17,7 +17,7 @@
 
 import { promises as fs } from "node:fs";
 import { extname, join, relative, resolve } from "node:path";
-import { ToolRegistry } from "@praetor/tools";
+import { ToolRegistry } from "@kpanks/tools";
 
 export interface RepoMapToolsOptions {
   repoRoot: string;

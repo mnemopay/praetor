@@ -15,7 +15,7 @@ export {
   runMission,
   PolicyEngine,
   MerkleAudit
-} from "@praetor/core";
+} from "@kpanks/core";
 
 // Tools & Registry
 export {
@@ -23,7 +23,7 @@ export {
   type ToolHandler,
   type ToolCallContext,
   ToolRegistry
-} from "@praetor/tools";
+} from "@kpanks/tools";
 
 // Fiscal Gates (MnemoPay)
 export {
@@ -31,4 +31,4 @@ export {
   type MnemoPayClient,
   MockPayments,
   MnemoPayAdapter
-} from "@praetor/payments";
+} from "@kpanks/payments";

@@ -82,7 +82,7 @@ gh workflow run publish.yml -f package=core -f tag=latest -R mnemopay/praetor
 Watch at https://github.com/mnemopay/praetor/actions. Should succeed.
 Then verify:
 ```bash
-npm view @praetor/core version
+npm view @kpanks/core version
 # → 0.1.0
 ```
 
@@ -174,7 +174,7 @@ Page sections (use `od-saas-landing` skill):
 - Pricing: free for first 100 charters/month, $49/mo Plus, $299/mo
   Enterprise (mirrors MnemoPay tiers)
 - Docs link → praetor-api.fly.dev/docs
-- npm install card → `npm install -g @praetor/cli`
+- npm install card → `npm install -g @kpanks/cli`
 - Trust seal: 511 tests, MIT/Apache, EU AI Act Article 12 ready
 
 ### 9-13: deferred to v0.2 / ops
@@ -188,7 +188,7 @@ Page sections (use `od-saas-landing` skill):
 
 ## What "consumer-ready" means after this sprint
 
-- ✅ `npm install -g @praetor/cli` works
+- ✅ `npm install -g @kpanks/cli` works
 - ✅ `praetor run mission.yaml` works against the Fly api
 - ✅ Missions persist in Supabase (survive restart)
 - ✅ Authenticated by per-developer `pt_live_…` keys
@@ -211,7 +211,7 @@ What's NOT done by this sprint and is intentional v0.2 work:
 
 ```bash
 # Anyone in the world can run:
-npm install -g @praetor/cli
+npm install -g @kpanks/cli
 export PRAETOR_API_KEY=pt_live_xxx              # signed up at getbizsuite.com/developers
 echo 'goal: "summarize hacker news today"' > mission.yaml
 praetor run mission.yaml

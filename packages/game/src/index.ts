@@ -1,5 +1,5 @@
 /**
- * @praetor/game — web-native game engine.
+ * @kpanks/game — web-native game engine.
  *
  * A charter declares a `GameSpec` with entities, sprites, audio, input
  * bindings, and a tick function. `emitGameHtml(spec)` returns a single
@@ -14,9 +14,9 @@
  *   - `spec.physics`  — AABB collision, gravity, grounded flag
  *   - `spec.camera`   — viewport follow, deadzone, bounds, smoothing
  *
- * Companion to `@praetor/game-assets` (the Godot 4.4 scaffolder). Use
+ * Companion to `@kpanks/game-assets` (the Godot 4.4 scaffolder). Use
  * game-assets for serious game projects (multi-week, full engine);
- * @praetor/game for the "charter ships a playable demo TODAY" use case.
+ * @kpanks/game for the "charter ships a playable demo TODAY" use case.
  */
 
 /* ---------- Asset manifest --------------------------------------------- */

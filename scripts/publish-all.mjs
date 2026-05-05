@@ -72,19 +72,19 @@ for (const pkg of ordered) {
   }
   // Wait for the package to appear on npm before kicking the next.
   const targetVersion = await getLocalVersion(pkg);
-  console.log(`  waiting for @praetor/${pkg}@${targetVersion} to land on npm...`);
+  console.log(`  waiting for @kpanks/${pkg}@${targetVersion} to land on npm...`);
   let landed = false;
   for (let i = 0; i < 60; i++) { // max 10 minutes
     await sleep(10000);
     try {
-      const v = execSync(`npm view @praetor/${pkg}@${targetVersion} version`, { stdio: "pipe" }).toString().trim();
+      const v = execSync(`npm view @kpanks/${pkg}@${targetVersion} version`, { stdio: "pipe" }).toString().trim();
       if (v === targetVersion) { landed = true; break; }
     } catch { /* not yet */ }
     process.stdout.write(".");
   }
   console.log("");
   if (!landed) {
-    console.error(`  timeout waiting for @praetor/${pkg}@${targetVersion}`);
+    console.error(`  timeout waiting for @kpanks/${pkg}@${targetVersion}`);
     console.error(`  check the workflow run at https://github.com/mnemopay/praetor/actions`);
     console.error(`  resume with: node scripts/publish-all.mjs --start ${pkg}`);
     process.exit(1);

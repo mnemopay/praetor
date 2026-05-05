@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import type { ActivityEvent } from "@praetor/core";
+import type { ActivityEvent } from "@kpanks/core";
 
 // Import the adapter under test directly.
 import * as db from "./db-memory.js";
@@ -157,14 +157,14 @@ describe("db-memory adapter", () => {
   it("installPlugin is idempotent and listInstalledPlugins preserves insertion order", async () => {
     const uid = userId("plugins");
 
-    await db.installPlugin(uid, "@praetor/seo");
-    await db.installPlugin(uid, "@praetor/browser");
-    await db.installPlugin(uid, "@praetor/seo"); // duplicate — must not double-insert
+    await db.installPlugin(uid, "@kpanks/seo");
+    await db.installPlugin(uid, "@kpanks/browser");
+    await db.installPlugin(uid, "@kpanks/seo"); // duplicate — must not double-insert
 
     const plugins = await db.listInstalledPlugins(uid);
     expect(plugins).toHaveLength(2);
-    expect(plugins[0]).toBe("@praetor/seo");
-    expect(plugins[1]).toBe("@praetor/browser");
+    expect(plugins[0]).toBe("@kpanks/seo");
+    expect(plugins[1]).toBe("@kpanks/browser");
   });
 
   it("getMissionOwner returns userId for known mission and null for unknown", async () => {

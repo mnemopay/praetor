@@ -44,7 +44,7 @@ Charter authors should be able to expose any Praetor mission as an MCP tool
 and consume any MCP server as a charter capability. This is table stakes by
 end of Q3 2026. Concretely:
 
-- Ship `@praetor/mcp` with a server adapter (`praetor mcp serve`) and a
+- Ship `@kpanks/mcp` with a server adapter (`praetor mcp serve`) and a
   client adapter (`charter.tools` lists MCP servers).
 - Default to OAuth — never static secrets — to stay out of the 53% bucket.
 - Wrap every outbound MCP call through MnemoPay's HITL fiscal gate so a
@@ -52,7 +52,7 @@ end of Q3 2026. Concretely:
 
 ### 2. Ship Article 12 audit-log packs out of the box
 
-The Merkle chain in `@praetor/core` already gives chain-of-custody. We need
+The Merkle chain in `@kpanks/core` already gives chain-of-custody. We need
 the export bundle: mission metadata + every tool call + every model call +
 every cost event, packaged as CSV + JSON + a Merkle root proof, with
 retention metadata stamped on.
@@ -72,7 +72,7 @@ shared Node processes. Two adapters:
 
 ### 4. Pluggable LLM router with open-weight fallback
 
-The router is already implied in `@praetor/agents`. Make it explicit:
+The router is already implied in `@kpanks/agents`. Make it explicit:
 
 - OpenAI / Anthropic / Google for the hot path.
 - OpenRouter as the universal fallback.
@@ -86,13 +86,13 @@ The router is already implied in `@praetor/agents`. Make it explicit:
 
 Letta won the framing (core / archival / recall). MnemoPay's recall engine
 already has 205 tests + Merkle integrity + the Hindsight observations port
-(committed today). Wire it to charters as the default `@praetor/knowledge`
+(committed today). Wire it to charters as the default `@kpanks/knowledge`
 backend so Praetor matches Letta's coherence claim (500+ interaction context)
 without owning a separate memory store.
 
 ### 6. Native scrape + knowledge ingestion
 
-The `@praetor/scrape` pack already ships fetch + sitemap walk + JSON-LD
+The `@kpanks/scrape` pack already ships fetch + sitemap walk + JSON-LD
 extraction. Add:
 
 - `crawl4ai` adapter for richer extraction (already the user's default
@@ -103,7 +103,7 @@ extraction. Add:
 
 ### 7. Run a real business
 
-`@praetor/business-ops` already ships outbound / billing / scheduling / CRM
+`@kpanks/business-ops` already ships outbound / billing / scheduling / CRM
 in mock mode. Production wiring:
 
 - Maileroo for outbound (verified domain on getbizsuite.com per memory).
@@ -114,7 +114,7 @@ in mock mode. Production wiring:
 
 ### 8. Be great at design + video
 
-`@praetor/design` already emits Remotion + Hypeframes artifacts. Production
+`@kpanks/design` already emits Remotion + Hypeframes artifacts. Production
 wiring:
 
 - Hook the dele-video pipeline + ugc-pipeline so a charter can ask for

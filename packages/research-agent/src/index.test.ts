@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { ToolRegistry } from "@praetor/tools";
-import { InMemoryKnowledgeBase } from "@praetor/knowledge";
-import { LlmRouter, MockProvider } from "@praetor/router";
+import { ToolRegistry } from "@kpanks/tools";
+import { InMemoryKnowledgeBase } from "@kpanks/knowledge";
+import { LlmRouter, MockProvider } from "@kpanks/router";
 import { registerWebSearch, parseDuckHtml } from "./tools/web_search.js";
 import { registerFetchUrl } from "./tools/fetch_url.js";
 import { registerSynthesize } from "./tools/synthesize.js";

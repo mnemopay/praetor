@@ -1,5 +1,5 @@
 /**
- * @praetor/mcp — MCP server + client adapters.
+ * @kpanks/mcp — MCP server + client adapters.
  *
  * The Model Context Protocol (modelcontextprotocol.io) is JSON-RPC 2.0 over
  * stdio (default) or HTTP/SSE. Praetor speaks MCP both directions:
@@ -16,7 +16,7 @@
  * around this when you ship — the JSON-RPC frame is identical.
  */
 
-import type { ToolRegistry, ToolCallContext, FiscalGate } from "@praetor/tools";
+import type { ToolRegistry, ToolCallContext, FiscalGate } from "@kpanks/tools";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";

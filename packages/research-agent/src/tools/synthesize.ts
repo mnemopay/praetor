@@ -1,5 +1,5 @@
-import { ToolRegistry } from "@praetor/tools";
-import type { LlmRouter, RouteRequirements } from "@praetor/router";
+import { ToolRegistry } from "@kpanks/tools";
+import type { LlmRouter, RouteRequirements } from "@kpanks/router";
 
 /**
  * synthesize — collapse a list of source hits + optional excerpts into a

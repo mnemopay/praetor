@@ -1,5 +1,5 @@
 /**
- * @praetor/world-gen — native text/image -> 3D model and text/image/video ->
+ * @kpanks/world-gen — native text/image -> 3D model and text/image/video ->
  * 3D world generation. Backend-agnostic so the same Praetor tool surface
  * works against TRELLIS-2, Hunyuan3D, Tripo, fal sam-3d, World Labs Marble,
  * Tencent HY-World 2.0, or a self-hosted endpoint.
@@ -7,7 +7,7 @@
  *     import {
  *       defaultSelector, generate_3d_model, generate_3d_world,
  *       publish_3d_scene, edit_3d_scene,
- *     } from "@praetor/world-gen";
+ *     } from "@kpanks/world-gen";
  *
  *     const result = await generate_3d_model(
  *       { prompt: "low-poly red helmet", detail: "draft" },

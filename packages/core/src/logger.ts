@@ -6,7 +6,7 @@
  *
  * The public surface matches the spec exactly so any package can do:
  *
- *   import { log } from "@praetor/core";
+ *   import { log } from "@kpanks/core";
  *   log.info("mission started", { missionId, budget: charter.budget.maxUsd });
  *
  * The default process-wide `log` instance auto-wires a SentrySink when
@@ -40,11 +40,11 @@ function levelOrdinal(l: LogEvent["level"]): number {
 
 // ─── Field redaction ─────────────────────────────────────────────────────────
 // Intentionally self-contained (~10 lines) to avoid a circular dep with
-// @praetor/tools which has its own copy of this logic.
+// @kpanks/tools which has its own copy of this logic.
 
 /**
  * Default field redactor. Strips values whose key matches the sensitive-field
- * pattern, truncates long string values. Same semantics as @praetor/tools.
+ * pattern, truncates long string values. Same semantics as @kpanks/tools.
  */
 export function defaultRedact(fields: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};

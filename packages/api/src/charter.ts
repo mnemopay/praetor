@@ -1,4 +1,4 @@
-import type { Charter, CharterRole } from "@praetor/core";
+import type { Charter, CharterRole } from "@kpanks/core";
 
 export type AgentChoice = "native" | "coding" | "research" | "world-gen";
 

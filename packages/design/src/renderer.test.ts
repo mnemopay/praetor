@@ -211,10 +211,10 @@ describe("react-remotion target", () => {
     expect(paths.some((p) => p.endsWith(".tsx"))).toBe(true);
     expect(paths.some((p) => p.endsWith("/remotion.config.cjs"))).toBe(true);
   });
-  it("imports tokens from @praetor/design/tokens", () => {
+  it("imports tokens from @kpanks/design/tokens", () => {
     const r = render(videoScene(), "react-remotion");
     const composition = r.files.find((f) => f.path.endsWith(".tsx") && !f.path.endsWith("Root.tsx"))?.contents ?? "";
-    expect(composition).toContain('from "@praetor/design/tokens"');
+    expect(composition).toContain('from "@kpanks/design/tokens"');
     expect(composition).not.toMatch(/#[0-9a-f]{6}/i); // no inline hex
   });
   it("registers Composition with the right fps/duration/dimensions", () => {

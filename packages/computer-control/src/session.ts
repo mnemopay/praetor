@@ -24,8 +24,8 @@
  * where input mutation is intentionally disabled (read-only sessions).
  */
 
-import type { ActivityBus, ActivityEvent } from "@praetor/core";
-import { PraetorScreen, type PraetorScreenOptions, type ScreenFrame } from "@praetor/vision";
+import type { ActivityBus, ActivityEvent } from "@kpanks/core";
+import { PraetorScreen, type PraetorScreenOptions, type ScreenFrame } from "@kpanks/vision";
 
 export interface AuditSinkLite {
   record: (type: string, data: Record<string, unknown>) => void;

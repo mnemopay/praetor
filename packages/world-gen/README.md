@@ -1,4 +1,4 @@
-# @praetor/world-gen
+# @kpanks/world-gen
 
 Native text/image -> 3D model and text/image/video -> 3D world generation for
 Praetor. Backend-agnostic: TRELLIS-2, Hunyuan3D 2.x, Tripo, fal.ai sam-3,

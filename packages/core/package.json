@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/core",
+  "name": "@kpanks/core",
   "version": "0.1.0",
   "description": "Praetor core — charter schema, mission lifecycle, Merkle audit chain (SHA-256, EU AI Act Article 12 ready), event bus.",
   "keywords": [

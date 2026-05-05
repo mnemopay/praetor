@@ -1,4 +1,4 @@
-import { InMemoryActivityBus, type ActivityBus, type ActivityEvent } from "@praetor/core";
+import { InMemoryActivityBus, type ActivityBus, type ActivityEvent } from "@kpanks/core";
 import { recordActivityEvent } from "./db.js";
 
 /**

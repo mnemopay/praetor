@@ -8,7 +8,7 @@
  * tool. Supabase was an arbitrary backend choice. The api package now boots
  * with zero infra; missions persist for the lifetime of the process.
  *
- * For durable storage in production, ship `@praetor/store-supabase` (or
+ * For durable storage in production, ship `@kpanks/store-supabase` (or
  * `-postgres`, `-sqlite`, `-mnemopay-recall`) as opt-in adapters tagged
  * origin: "adapter".
  */

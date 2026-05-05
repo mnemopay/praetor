@@ -1,5 +1,5 @@
 /**
- * @praetor/tools — MCP-compatible tool registry.
+ * @kpanks/tools — MCP-compatible tool registry.
  *
  * A charter declares `tools: ["weather", "stripe.charge"]`. The runtime resolves
  * those names through this registry, runs them with the matching JSON-schema

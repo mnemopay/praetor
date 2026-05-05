@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { InMemoryActivityBus, type ActivityEvent } from "@praetor/core";
+import { InMemoryActivityBus, type ActivityEvent } from "@kpanks/core";
 import { PraetorBrowser, MockBrowserAdapter, PlaywrightAdapter, type BrowserSnapshot, type ElementRef } from "./index.js";
 import { compressAccessibilityTree } from "./adapters/playwright.js";
 

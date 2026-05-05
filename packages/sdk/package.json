@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/sdk",
+  "name": "@kpanks/sdk",
   "version": "0.1.0",
   "description": "Developer SDK for the Praetor API Economy",
   "type": "module",
@@ -10,9 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@praetor/core": "*",
-    "@praetor/tools": "*",
-    "@praetor/payments": "*"
+    "@kpanks/core": "*",
+    "@kpanks/tools": "*",
+    "@kpanks/payments": "*"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

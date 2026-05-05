@@ -937,7 +937,7 @@ async function renderBilling() {
 
 // ─── World ───────────────────────────────────────────────────────────────
 // Browses 3D models, gaussian-splat worlds, and SuperSplat-edited scenes
-// produced by @praetor/world-gen tools (generate_3d_model, generate_3d_world,
+// produced by @kpanks/world-gen tools (generate_3d_model, generate_3d_world,
 // publish_3d_scene). Embeds <model-viewer> for GLBs and Spark 2.0 for splats.
 
 // Tools

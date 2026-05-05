@@ -1,4 +1,4 @@
-# @praetor/desktop
+# @kpanks/desktop
 
 Electron-wrapped Praetor for single-user local installs.
 
@@ -24,7 +24,7 @@ that bloats the workspace for non-desktop consumers.
                                  │
                                  ▼
                   ┌──────────────────────────────┐
-                  │ @praetor/api (in-process)    │
+                  │ @kpanks/api (in-process)    │
                   │  • createApp() PraetorHTTP   │
                   │  • dashboard at /            │
                   │  • mission api at /api/v1    │
@@ -33,7 +33,7 @@ that bloats the workspace for non-desktop consumers.
 ```
 
 The Electron renderer (the BrowserWindow's webview) is just the existing
-`@praetor/dashboard` UI talking to localhost. **Praetor's headless
+`@kpanks/dashboard` UI talking to localhost. **Praetor's headless
 Chromium** (the one PraetorBrowser launches via playwright-core when a
 charter calls `browser_navigate`) is **separate** — it's a *different*
 Chromium binary, headless, never visible to the user, and lives only for
@@ -43,7 +43,7 @@ the lifetime of a charter that needs it.
 
 ```bash
 # 1. Install electron in the desktop workspace
-npm install electron --workspace=@praetor/desktop --save-dev
+npm install electron --workspace=@kpanks/desktop --save-dev
 
 # 2. Build everything
 npx tsc -b

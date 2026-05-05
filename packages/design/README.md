@@ -1,4 +1,4 @@
-# @praetor/design
+# @kpanks/design
 
 Motion-first landing pages from a single declarative spec. Spline,
 HTML-in-Canvas-3D, Hypeframes, Remotion, AntiGravity-style hero presets,
@@ -7,13 +7,13 @@ declarative-UI emitter — all from one renderer.
 ## Install
 
 ```bash
-npm install @praetor/design
+npm install @kpanks/design
 ```
 
 ## Usage
 
 ```ts
-import { Renderer, parseDesignSpec } from "@praetor/design";
+import { Renderer, parseDesignSpec } from "@kpanks/design";
 
 const spec = parseDesignSpec(yaml);
 const html = await new Renderer().render(spec);

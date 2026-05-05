@@ -30,7 +30,7 @@ import {
 } from "node:http";
 import { stat, createReadStream } from "node:fs";
 import { extname } from "node:path";
-import { log } from "@praetor/core";
+import { log } from "@kpanks/core";
 
 export interface PraetorRequest extends IncomingMessage {
   /** Path component of the URL with the mount prefix already stripped. */

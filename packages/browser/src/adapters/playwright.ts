@@ -1,8 +1,8 @@
 /**
  * PlaywrightAdapter — lazy-loads `playwright-core` (Apache 2.0). The actual
  * browser-launching dependency is treated as an optional peer so the
- * @praetor/browser package itself stays light. Mirrors the KokoroAdapter
- * pattern from @praetor/voice.
+ * @kpanks/browser package itself stays light. Mirrors the KokoroAdapter
+ * pattern from @kpanks/voice.
  *
  * playwright-core is the *runtime primitive* (a CDP client), not a wrapper
  * around another agent stack. It satisfies the "Praetor tools are custom

@@ -1,4 +1,4 @@
-import { ToolRegistry } from "@praetor/tools";
+import { ToolRegistry } from "@kpanks/tools";
 import { PraetorComputerSession, noopInputAdapter, type ComputerInputAdapter, type PraetorComputerSessionOptions } from "./session.js";
 
 export interface RegisterComputerToolsOptions extends PraetorComputerSessionOptions {

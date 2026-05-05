@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/3d",
+  "name": "@kpanks/3d",
   "version": "0.1.0",
   "description": "Praetor-native image-to-3D + text-to-3D runtime. Default backend is Microsoft TRELLIS (MIT, image -> GLB mesh + PBR textures) via Replicate's hosted endpoint. Mock + future self-hosted Diffusers + Hugging Face Inference adapters available.",
   "keywords": [
@@ -43,6 +43,6 @@
   },
   "author": "J&B Enterprise LLC <jeremiah@getbizsuite.com>",
   "dependencies": {
-    "@praetor/core": "*"
+    "@kpanks/core": "*"
   }
 }

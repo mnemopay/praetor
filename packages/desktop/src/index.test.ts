@@ -3,7 +3,7 @@ import { createServer, type Server as TcpServer } from "node:net";
 import type { Server as HttpServer } from "node:http";
 import { bootstrap, ensureDesktopEnvDefaults, pickPort } from "./index.js";
 
-describe("@praetor/desktop bootstrap", () => {
+describe("@kpanks/desktop bootstrap", () => {
   let savedSupabaseUrl: string | undefined;
   let savedKey: string | undefined;
   let savedRepoRoot: string | undefined;

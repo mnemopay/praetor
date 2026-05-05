@@ -1,11 +1,11 @@
-# @praetor/cli
+# @kpanks/cli
 
 The Praetor agent runtime CLI. Run YAML mission charters with native
 browser, sandbox, voice, screen, scrape, payment, and audit tools wired
 in. Charter-driven, fiscally gated, audit-logged by default.
 
 ```bash
-npm install -g @praetor/cli
+npm install -g @kpanks/cli
 ```
 
 ## Quick start

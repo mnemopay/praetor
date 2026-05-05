@@ -14,9 +14,9 @@ describe("buildCharter", () => {
     const charter = buildCharter({
       goal: "Run mission",
       outputs: ["artifact"],
-      plugins: ["@praetor/seo"],
+      plugins: ["@kpanks/seo"],
     });
-    expect(charter.plugins).toEqual(["@praetor/seo"]);
+    expect(charter.plugins).toEqual(["@kpanks/seo"]);
     expect(charter.outputs).toEqual(["artifact"]);
   });
 });

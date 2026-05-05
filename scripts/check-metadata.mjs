@@ -1,7 +1,7 @@
 import { buildEnhancedRegistry } from "../packages/cli/dist/index.js";
 
 async function main() {
-  const { defaultRegistry } = await import("@praetor/tools");
+  const { defaultRegistry } = await import("@kpanks/tools");
   // Build a dummy charter
   const charter = { name: "test", goal: "test", budget: { maxUsd: 1, approvalThresholdUsd: 1 }, agents: [], outputs: [] };
   // A hacky way to get the registry to load all tools natively
@@ -13,7 +13,7 @@ async function main() {
   
   // We can just import everything and build it.
   try {
-    const registry = await import("@praetor/tools").then(m => m.defaultRegistry());
+    const registry = await import("@kpanks/tools").then(m => m.defaultRegistry());
     // Also build enhanced
     // We will just do a basic check on the default registry for now.
     const report = registry.productionReport();

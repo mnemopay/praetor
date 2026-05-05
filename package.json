@@ -12,7 +12,7 @@
     "test": "vitest run",
     "lint": "tsc -b",
     "praetor": "node packages/cli/dist/index.js",
-    "dev": "npm run dev --workspace=@praetor/dashboard"
+    "dev": "npm run dev --workspace=@kpanks/dashboard"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

@@ -1,5 +1,5 @@
 /**
- * @praetor/voice — Praetor-native text-to-speech runtime.
+ * @kpanks/voice — Praetor-native text-to-speech runtime.
  *
  * Per `feedback_praetor_native_tools.md`, the default backend is Kokoro 82M
  * (Apache 2.0, ONNX-based, lazy-loaded). Third-party services (Azure Speech,

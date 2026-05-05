@@ -1,6 +1,6 @@
 import { promises as fs } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { ToolRegistry, type ToolDefinition } from "@praetor/tools";
+import { ToolRegistry, type ToolDefinition } from "@kpanks/tools";
 import { applyUnifiedDiff } from "./unified_diff.js";
 
 /**

@@ -2,7 +2,7 @@
 /**
  * Render the Sonova Construction pitch site via PraetorRenderer.
  *
- * First real-world charter rendered through @praetor/design.
+ * First real-world charter rendered through @kpanks/design.
  * Output: bizsuite-site/pitch/sonova/index.html (+ og.svg + email.html).
  * Deploy: bizsuite-site Fly machine (express.static auto-serves).
  */

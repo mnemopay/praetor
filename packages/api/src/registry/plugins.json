@@ -1,36 +1,36 @@
 [
   {
-    "name": "@praetor/seo",
+    "name": "@kpanks/seo",
     "version": "0.0.1",
     "provider": "praetor",
     "description": "GEO and SEO automation toolkit."
   },
   {
-    "name": "@praetor/design",
+    "name": "@kpanks/design",
     "version": "0.0.1",
     "provider": "praetor",
     "description": "Design and media generation pack."
   },
   {
-    "name": "@praetor/business-ops",
+    "name": "@kpanks/business-ops",
     "version": "0.0.1",
     "provider": "praetor",
     "description": "Business operations surfaces for outbound, invoices, and CRM."
   },
   {
-    "name": "@praetor/scrape",
+    "name": "@kpanks/scrape",
     "version": "0.0.1",
     "provider": "praetor",
     "description": "Web scraping and crawl tooling."
   },
   {
-    "name": "@praetor/coding-agent",
+    "name": "@kpanks/coding-agent",
     "version": "0.1.0",
     "provider": "praetor",
     "description": "Coding agent: read/write/edit files, run tests, drive git, and execute build commands inside a constrained repo root."
   },
   {
-    "name": "@praetor/research-agent",
+    "name": "@kpanks/research-agent",
     "version": "0.1.0",
     "provider": "praetor",
     "description": "Research agent: search the web, fetch primary sources, synthesize structured reports with citations, and feed findings into the knowledge base."

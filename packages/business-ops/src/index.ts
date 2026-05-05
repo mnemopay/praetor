@@ -391,7 +391,7 @@ export class BusinessOps {
 
 // ---------- audit wrapper + factory ----------------------------------------
 
-/** Minimal shape of a Merkle-style auditor. Matches @praetor/core MerkleAudit. */
+/** Minimal shape of a Merkle-style auditor. Matches @kpanks/core MerkleAudit. */
 export interface AuditSink {
   record: (type: string, data: Record<string, unknown>) => void;
 }

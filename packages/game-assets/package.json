@@ -1,7 +1,7 @@
 {
-  "name": "@praetor/game-assets",
+  "name": "@kpanks/game-assets",
   "version": "0.1.0",
-  "description": "Praetor game-asset pipeline — one spec → runnable Godot 4.4 project. Sprites, textures, music, SFX, scene tree, controller stub. Same adapter contract as @praetor/ugc; reuses image, audio, and music backends.",
+  "description": "Praetor game-asset pipeline — one spec → runnable Godot 4.4 project. Sprites, textures, music, SFX, scene tree, controller stub. Same adapter contract as @kpanks/ugc; reuses image, audio, and music backends.",
   "keywords": [
     "godot",
     "game-assets",

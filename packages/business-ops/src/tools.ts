@@ -1,4 +1,4 @@
-import { ToolRegistry } from "@praetor/tools";
+import { ToolRegistry } from "@kpanks/tools";
 import { BusinessOps, defaultBusinessOps, OutboundEmail, Invoice, MeetingRequest, Contact } from "./index.js";
 
 export interface BusinessOpsToolsOptions {

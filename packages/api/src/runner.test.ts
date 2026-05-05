@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import type { Charter } from "@praetor/core";
+import type { Charter } from "@kpanks/core";
 
 describe("runner charter serialization", () => {
   it("round-trips special characters and preserves all agents", () => {
@@ -12,7 +12,7 @@ describe("runner charter serialization", () => {
       budget: { maxUsd: 3.5, approvalThresholdUsd: 0 },
       agents: [{ role: "developer" }, { role: "auditor" }],
       outputs: ["artifact:one", "notes # public"],
-      plugins: ["@praetor/seo"],
+      plugins: ["@kpanks/seo"],
     };
 
     return import("./runner.js").then(({ toYaml }) => {

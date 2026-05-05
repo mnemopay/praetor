@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/ugc",
+  "name": "@kpanks/ugc",
   "version": "0.1.0",
   "description": "Praetor UGC pipeline — portrait → motion → voiceover → composite. OpenAI gpt-image-1, Luma Dream Machine, Replicate (Seedance/Nano-Banana), Hedra Character-3 lipsync, Azure Neural TTS, ffmpeg compositor.",
   "keywords": [

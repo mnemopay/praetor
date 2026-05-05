@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { McpServer, McpClient, type McpClientTransport } from "./index.js";
-import { ToolRegistry } from "@praetor/tools";
+import { ToolRegistry } from "@kpanks/tools";
 
 function makeServerWithEcho() {
   const reg = new ToolRegistry();

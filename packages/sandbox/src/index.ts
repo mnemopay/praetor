@@ -1,5 +1,5 @@
 /**
- * @praetor/sandbox — sandboxed execution for charters that touch real infra.
+ * @kpanks/sandbox — sandboxed execution for charters that touch real infra.
  *
  * Five adapters, ranked by isolation:
  *   - LocalSandbox: direct host execution, NO isolation. Use only for

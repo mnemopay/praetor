@@ -1,5 +1,5 @@
 /**
- * @praetor/research-agent — Praetor's research agent.
+ * @kpanks/research-agent — Praetor's research agent.
  *
  * Composes a `NativePraetorEngine` with web search, source fetch,
  * synthesis, and knowledge-base ingest tools. Cost-aware via
@@ -9,11 +9,11 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { NativePraetorEngine, type AgentRunInput, type AgentRunResult } from "@praetor/agents";
-import type { LlmRouter, RouteRequirements } from "@praetor/router";
-import { ToolRegistry, type ToolCallContext } from "@praetor/tools";
-import { InMemoryKnowledgeBase, type KnowledgeBase } from "@praetor/knowledge";
-import type { PolicyEngine } from "@praetor/core";
+import { NativePraetorEngine, type AgentRunInput, type AgentRunResult } from "@kpanks/agents";
+import type { LlmRouter, RouteRequirements } from "@kpanks/router";
+import { ToolRegistry, type ToolCallContext } from "@kpanks/tools";
+import { InMemoryKnowledgeBase, type KnowledgeBase } from "@kpanks/knowledge";
+import type { PolicyEngine } from "@kpanks/core";
 
 import { registerWebSearch } from "./tools/web_search.js";
 import { registerFetchUrl } from "./tools/fetch_url.js";

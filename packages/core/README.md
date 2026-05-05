@@ -1,4 +1,4 @@
-# @praetor/core
+# @kpanks/core
 
 The runtime substrate every Praetor package builds on. Charter schema,
 mission lifecycle, in-memory `ActivityBus`, structured logger, and the
@@ -7,7 +7,7 @@ Merkle audit chain (SHA-256, EU AI Act Article 12 ready).
 ## Install
 
 ```bash
-npm install @praetor/core
+npm install @kpanks/core
 ```
 
 ## Public surface
@@ -18,7 +18,7 @@ import {
   InMemoryActivityBus,
   Logger,
   Article12AuditChain,
-} from "@praetor/core";
+} from "@kpanks/core";
 ```
 
 - **Charter schema** — declarative mission spec a charter author writes.

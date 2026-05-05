@@ -1,6 +1,6 @@
 # HY-World 2.0 — Self-Hosted Endpoint Protocol
 
-`@praetor/world-gen`'s `HyWorldBackend` is intentionally protocol-only. Tencent's HY-World 2.0 ships as a Python library and a reference inference script — there's no canonical hosted REST API. Users who self-host stand up their own wrapper.
+`@kpanks/world-gen`'s `HyWorldBackend` is intentionally protocol-only. Tencent's HY-World 2.0 ships as a Python library and a reference inference script — there's no canonical hosted REST API. Users who self-host stand up their own wrapper.
 
 To plug a self-hosted instance into Praetor, expose a single endpoint that conforms to the contract below. Set `HYWORLD_ENDPOINT=https://your-host/api/world-gen` and (optionally) `HYWORLD_AUTH=Bearer your-token`.
 

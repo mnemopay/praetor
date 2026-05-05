@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       package:
-        description: 'Package name (the part after "@praetor/" — e.g. browser, voice, scrape).'
+        description: 'Package name (the part after "@kpanks/" — e.g. browser, voice, scrape).'
         required: true
         type: string
       tag:

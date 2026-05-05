@@ -1,4 +1,4 @@
-# @praetor/computer-control
+# @kpanks/computer-control
 
 Praetor-native computer-use session. Captures the screen via
 `PraetorScreen`, audits every action, streams `tool.*` events on the
@@ -8,13 +8,13 @@ through a pluggable input adapter so the runtime stays cross-platform.
 ## Install
 
 ```bash
-npm install @praetor/computer-control
+npm install @kpanks/computer-control
 ```
 
 ## Usage
 
 ```ts
-import { ComputerControlSession } from "@praetor/computer-control";
+import { ComputerControlSession } from "@kpanks/computer-control";
 
 const session = new ComputerControlSession({ bus, missionId });
 const snap = await session.snapshot();

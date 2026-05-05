@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/world-gen",
+  "name": "@kpanks/world-gen",
   "version": "0.1.0",
   "description": "Praetor World-Gen — native text/image -> 3D model (GLB) and text/image/video -> 3D world (Gaussian splat) generation. Backend-agnostic: TRELLIS-2, Hunyuan3D 2.1, Tripo, fal.ai sam-3, World Labs Marble, Tencent HY-World 2.0. Includes a self-contained web viewer (Spark 2.0 + <model-viewer> + SuperSplat embed) so generated assets are explorable without third-party UI.",
   "keywords": [

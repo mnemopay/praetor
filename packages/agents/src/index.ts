@@ -4,7 +4,7 @@ export interface AgentRunInput {
   budgetUsd: number;
   steps?: { action: string; args?: Record<string, unknown> }[];
   signal?: AbortSignal;
-  agents?: import("@praetor/core").CharterAgent[];
+  agents?: import("@kpanks/core").CharterAgent[];
   role?: string;
 }
 
@@ -29,10 +29,10 @@ export class EchoAgent implements AgentAdapter {
   }
 }
 
-import type { LlmRouter, RouteRequirements, ChatMessage } from "@praetor/router";
-import type { ToolRegistry, ToolCallContext } from "@praetor/tools";
+import type { LlmRouter, RouteRequirements, ChatMessage } from "@kpanks/router";
+import type { ToolRegistry, ToolCallContext } from "@kpanks/tools";
 
-import type { PolicyEngine } from "@praetor/core";
+import type { PolicyEngine } from "@kpanks/core";
 
 /**
  * NativePraetorEngine — the core agentic loop of Praetor.

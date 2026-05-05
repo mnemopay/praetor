@@ -9,8 +9,8 @@
  * warning and becomes a no-op. It never throws.
  *
  * Usage:
- *   import { log } from "@praetor/core";
- *   import { SentrySink } from "@praetor/core/sinks/sentry";
+ *   import { log } from "@kpanks/core";
+ *   import { SentrySink } from "@kpanks/core/sinks/sentry";
  *   log.addSink(new SentrySink({ dsn: process.env.SENTRY_DSN! }));
  *
  * Or let the default `log` instance wire it automatically via SENTRY_DSN env.

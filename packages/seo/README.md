@@ -1,4 +1,4 @@
-# @praetor/seo
+# @kpanks/seo
 
 GEO/SEO emission pack for Praetor charters. Declarative input, 15+
 output surfaces:
@@ -13,13 +13,13 @@ output surfaces:
 ## Install
 
 ```bash
-npm install @praetor/seo
+npm install @kpanks/seo
 ```
 
 ## Usage
 
 ```ts
-import { emit } from "@praetor/seo";
+import { emit } from "@kpanks/seo";
 
 const surfaces = emit({
   site: { name: "Linger", url: "https://linger.chat" },

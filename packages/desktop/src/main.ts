@@ -4,11 +4,11 @@
  * close.
  *
  * Electron is an optional peer dep — install it locally with
- *   npm install electron --workspace=@praetor/desktop --save-dev
+ *   npm install electron --workspace=@kpanks/desktop --save-dev
  * then run `npm start` from packages/desktop.
  *
  * This file is the entry referenced by package.json#main; it dynamically
- * imports `electron` so the shared @praetor/desktop package stays
+ * imports `electron` so the shared @kpanks/desktop package stays
  * importable in non-Electron contexts (Node tests, server-only deploys).
  */
 
@@ -47,7 +47,7 @@ async function loadElectron(): Promise<ElectronModuleLike> {
     return (await import(/* @vite-ignore */ specifier)) as unknown as ElectronModuleLike;
   } catch {
     throw new Error(
-      "@praetor/desktop: 'electron' peer dep is not installed. Run `npm install electron --workspace=@praetor/desktop --save-dev` and retry.",
+      "@kpanks/desktop: 'electron' peer dep is not installed. Run `npm install electron --workspace=@kpanks/desktop --save-dev` and retry.",
     );
   }
 }

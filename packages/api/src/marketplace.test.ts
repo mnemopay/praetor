@@ -9,7 +9,7 @@ describe("marketplace", () => {
   });
 
   it("validates npm scoped plugin names", () => {
-    expect(validatePluginName("@praetor/seo")).toBe(true);
+    expect(validatePluginName("@kpanks/seo")).toBe(true);
     expect(validatePluginName("seo")).toBe(false);
     expect(validatePluginName("@praetor seo")).toBe(false);
   });

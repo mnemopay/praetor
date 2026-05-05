@@ -10,7 +10,7 @@
  */
 
 import type { MissionRecord } from "./types.js";
-import type { ActivityEvent } from "@praetor/core";
+import type { ActivityEvent } from "@kpanks/core";
 
 // ── Storage ──────────────────────────────────────────────────────────────────
 

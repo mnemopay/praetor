@@ -1,9 +1,9 @@
-import { ToolRegistry } from "@praetor/tools";
-import type { KnowledgeBase } from "@praetor/knowledge";
-import { chunkText } from "@praetor/knowledge";
+import { ToolRegistry } from "@kpanks/tools";
+import type { KnowledgeBase } from "@kpanks/knowledge";
+import { chunkText } from "@kpanks/knowledge";
 
 /**
- * ingest_kb — drop gathered text into a `@praetor/knowledge` knowledge
+ * ingest_kb — drop gathered text into a `@kpanks/knowledge` knowledge
  * base so future missions can recall what this run learned.
  */
 

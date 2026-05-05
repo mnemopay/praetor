@@ -533,7 +533,7 @@ export class Crawl4AIAdapter implements ScrapeAdapter {
 /**
  * playwright-mcp adapter — bridges to a running playwright-mcp server via
  * any object that exposes `callTool(name, args)` (so it works with the
- * `@praetor/mcp` McpClient and any other JSON-RPC bridge). The MCP server is
+ * `@kpanks/mcp` McpClient and any other JSON-RPC bridge). The MCP server is
  * expected to expose `browser_navigate` followed by `browser_snapshot`
  * (or equivalent text-extraction tool), per playwright-mcp's documented API.
  */

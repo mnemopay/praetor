@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/research-agent",
+  "name": "@kpanks/research-agent",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,12 +12,12 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@praetor/agents": "*",
-    "@praetor/core": "*",
-    "@praetor/knowledge": "*",
-    "@praetor/router": "*",
-    "@praetor/scrape": "*",
-    "@praetor/tools": "*"
+    "@kpanks/agents": "*",
+    "@kpanks/core": "*",
+    "@kpanks/knowledge": "*",
+    "@kpanks/router": "*",
+    "@kpanks/scrape": "*",
+    "@kpanks/tools": "*"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

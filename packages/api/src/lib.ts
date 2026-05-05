@@ -1,5 +1,5 @@
 /**
- * Library entry point for @praetor/api.
+ * Library entry point for @kpanks/api.
  *
  * Exposes the app factory and env config so embedders (e.g. the CLI's
  * `praetor serve` command) can import and listen without triggering the

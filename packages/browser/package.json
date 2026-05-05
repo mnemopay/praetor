@@ -1,5 +1,5 @@
 {
-  "name": "@praetor/browser",
+  "name": "@kpanks/browser",
   "version": "0.1.0",
   "description": "Praetor-native browser agent runtime. DOM-first via Chrome DevTools Protocol (lazy playwright-core peer). Stagehand-shaped natural-language act() over CDP. Vision fallback via PraetorScreen for canvas / anti-bot pages.",
   "keywords": [
@@ -43,9 +43,9 @@
   },
   "author": "J&B Enterprise LLC <jeremiah@getbizsuite.com>",
   "dependencies": {
-    "@praetor/core": "*",
-    "@praetor/tools": "*",
-    "@praetor/vision": "*"
+    "@kpanks/core": "*",
+    "@kpanks/tools": "*",
+    "@kpanks/vision": "*"
   },
   "peerDependenciesMeta": {
     "playwright-core": {
