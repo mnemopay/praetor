@@ -603,3 +603,51 @@ function escapeText(s: string) {
 function pascal(s: string) {
   return s.replace(/(^|[-_ ])([a-z0-9])/g, (_, __, c: string) => c.toUpperCase());
 }
+
+/* ---------- design system re-exports ----------------------------------- */
+// These are the primitives a charter author needs to consume the Praetor
+// design system from `@kpanks/design`. Each module is also reachable via its
+// subpath (`@kpanks/design/tokens`, `@kpanks/design/visual-qa`, etc.) — both
+// surfaces are declared in package.json `exports`.
+
+export {
+  PRAETOR_EASE,
+  tokens,
+  tokensToCssVariables,
+  lintVoice,
+  lintEase,
+} from "./tokens.js";
+export type {
+  PraetorTokens,
+  ColorTokens,
+  TypeStack,
+  TypeScale,
+  FluidSize,
+  LayoutTokens,
+  MotionTokens,
+  ComponentTokens,
+  IconTokens,
+  VoiceTokens,
+} from "./tokens.js";
+
+export { render } from "./renderer.js";
+
+export { audit, passes, formatFindings } from "./visual-qa.js";
+export type { QaFinding, QaInput } from "./visual-qa.js";
+
+export { defaultAccessibility, defaultResponsive } from "./spec.js";
+export type {
+  PraetorScene,
+  RendererTarget,
+  RenderResult,
+  RenderWarning,
+  DesignFile,
+  SceneNode,
+  CompositionLayer,
+  AccessibilityConstraints,
+  ResponsiveConstraints,
+  AssetProvenance,
+  VideoComposition,
+  HyperframesComposition,
+  SceneMeta,
+} from "./spec.js";
