@@ -1,6 +1,20 @@
-import { buildEnhancedRegistry } from "@kpanks/cli";
 import type { Charter } from "@kpanks/core";
 import type { ToolProductionMetadata } from "@kpanks/tools";
+
+// @kpanks/cli depends on @kpanks/api; we lazy-import via an indirected
+// specifier to break the cycle for npm publish. tsc can't resolve
+// "@kpanks/cli" through a string variable, so cli stays out of the
+// build graph here. (Same pattern used by packages/desktop.)
+type BuildEnhancedRegistry = typeof import("@kpanks/cli").buildEnhancedRegistry;
+let _buildEnhancedRegistry: BuildEnhancedRegistry | null = null;
+async function buildEnhancedRegistry(charter: Charter, missionId: string) {
+  if (!_buildEnhancedRegistry) {
+    const cliSpec = "@kpanks/cli";
+    const mod = (await import(cliSpec)) as { buildEnhancedRegistry: BuildEnhancedRegistry };
+    _buildEnhancedRegistry = mod.buildEnhancedRegistry;
+  }
+  return _buildEnhancedRegistry(charter, missionId);
+}
 
 export interface ToolCatalogItem {
   name: string;
