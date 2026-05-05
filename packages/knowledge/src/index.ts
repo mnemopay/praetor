@@ -1,4 +1,18 @@
 export * from "./mnemopay.js";
+export {
+  TreeIndexKnowledgeBase,
+  parseMarkdownToTree,
+  collectTreeText,
+  walkTree,
+  makeKeywordTreeIndexLlm,
+} from "./tree-index.js";
+export type {
+  TreeIndexLlm,
+  TreeIndexOptions,
+  TreeNode,
+  TreePickOption,
+  TreePickResult,
+} from "./tree-index.js";
 
 /**
  * Praetor Knowledge pack — a vector knowledge base. Charters call
