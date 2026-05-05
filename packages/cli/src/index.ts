@@ -1374,6 +1374,79 @@ async function cmdDoctor(): Promise<void> {
   }
 
   lines.push("");
+  lines.push("sandbox:");
+  try {
+    const { LocalSandbox } = await import("@kpanks/sandbox");
+    const sb = new LocalSandbox({ defaultTimeoutMs: 10_000 });
+    const isWin = process.platform === "win32";
+    const probe = await sb.exec(isWin ? "echo praetor-doctor" : "echo praetor-doctor", { timeoutMs: 5_000 });
+    if (probe.exitCode === 0 && /praetor-doctor/.test(probe.stdout)) ok("local sandbox exec works");
+    else warn(`local sandbox exec returned exit=${probe.exitCode} stdout=${probe.stdout.slice(0, 60)}`);
+
+    const mockFactory = new MockSandboxFactory();
+    const m = await mockFactory.create();
+    const mp = await m.exec("noop");
+    ok(`mock sandbox factory ok (id=${m.id}, exit=${mp.exitCode})`);
+
+    const dockerEnabled = !!(process.env.PRAETOR_SANDBOX_DOCKER || process.env.DOCKER_HOST);
+    if (dockerEnabled) ok("docker sandbox env present (PRAETOR_SANDBOX_DOCKER/DOCKER_HOST set)");
+    else warn("docker sandbox not configured (set PRAETOR_SANDBOX_DOCKER=1 + ensure docker daemon for hardened isolation)");
+
+    if (process.env.E2B_API_KEY) ok("E2B_API_KEY present (firecracker isolation available)");
+    else warn("E2B_API_KEY unset (firecracker isolation unavailable)");
+  } catch (e) {
+    fail(`sandbox probe failed: ${(e as Error).message}`);
+  }
+
+  lines.push("");
+  lines.push("fiscal gate:");
+  try {
+    const mpKey = process.env.MNEMOPAY_API_KEY;
+    if (!mpKey) {
+      warn("MNEMOPAY_API_KEY unset — charters fall back to MockPayments (no real spend cap)");
+    } else if (/^mp_(live|test)_/.test(mpKey)) {
+      const kind = mpKey.startsWith("mp_live_") ? "live" : "test";
+      ok(`MnemoPay key format valid (${kind})`);
+      const cap = process.env.PRAETOR_MAX_USD_PER_MISSION;
+      if (cap && Number.isFinite(Number(cap)) && Number(cap) > 0) ok(`PRAETOR_MAX_USD_PER_MISSION=${cap}`);
+      else warn("PRAETOR_MAX_USD_PER_MISSION unset — charters use per-charter budget.maxUsd only");
+    } else {
+      fail(`MNEMOPAY_API_KEY does not match mp_live_*/mp_test_* prefix — likely misconfigured`);
+    }
+  } catch (e) {
+    fail(`fiscal-gate probe failed: ${(e as Error).message}`);
+  }
+
+  lines.push("");
+  lines.push("supabase:");
+  try {
+    const url = process.env.SUPABASE_URL;
+    const srv = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!url || !srv) {
+      warn("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY unset — praetor-api would fall back to in-memory shim");
+    } else {
+      try {
+        const u = new URL(url);
+        if (u.protocol !== "https:") warn(`SUPABASE_URL is non-https (${u.protocol}) — credentials would travel in cleartext`);
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 4_000);
+        const res = await fetch(`${url.replace(/\/$/, "")}/auth/v1/health`, {
+          headers: { apikey: srv, Authorization: `Bearer ${srv}` },
+          signal: ctrl.signal,
+        }).catch((e) => ({ ok: false, status: 0, _err: (e as Error).message } as any));
+        clearTimeout(t);
+        if (res && (res as any).ok) ok(`Supabase auth/v1/health reachable (${(res as any).status})`);
+        else if ((res as any)._err) fail(`Supabase unreachable: ${(res as any)._err}`);
+        else warn(`Supabase reachable but returned ${(res as any).status} (anon health probe — likely fine for service-role usage)`);
+      } catch (e) {
+        fail(`SUPABASE_URL malformed or unreachable: ${(e as Error).message}`);
+      }
+    }
+  } catch (e) {
+    fail(`supabase probe failed: ${(e as Error).message}`);
+  }
+
+  lines.push("");
   lines.push("hello-world dry run:");
   try {
     const path = await import("node:path");
