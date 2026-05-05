@@ -170,22 +170,22 @@ export function supabaseAdmin(): PraetorStoreClient {
     if (!realInitTried) {
       realInitTried = true;
       try {
-        // createRequire keeps this synchronous — required because supabaseAdmin()
-        // is called from synchronous code paths during server boot.
+        // Direct dynamic import — works in both Node ESM and the bundled
+        // Fly deploy. The earlier createRequire approach broke under tsc's
+        // ESM output because import.meta.url isn't always resolvable.
+        // We can use require() here because tsconfig has esModuleInterop
+        // and the api package itself is CJS-output (commonjs target).
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { createRequire } = require("node:module");
-        const req = createRequire(import.meta.url);
-        const supabase = req("@supabase/supabase-js");
+        const supabase = require("@supabase/supabase-js");
         realClient = supabase.createClient(url, key, {
           auth: { persistSession: false, autoRefreshToken: false },
         }) as PraetorStoreClient;
         // eslint-disable-next-line no-console
-        console.log("[praetor-api] real Supabase client active —", url);
+        console.log("[praetor-api] real Supabase client ACTIVE — writing to", url);
         return realClient;
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.warn("[praetor-api] @supabase/supabase-js not installed; falling back to in-memory store. Run: npm install @supabase/supabase-js");
-        // fall through to in-memory shim
+        console.warn("[praetor-api] @supabase/supabase-js init failed:", (err as Error).message);
       }
     }
   }
