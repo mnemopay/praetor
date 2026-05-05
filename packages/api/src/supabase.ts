@@ -1,3 +1,6 @@
+import { createRequire } from "node:module";
+const _req = createRequire(import.meta.url);
+
 /**
  * In-memory PostgREST-shape store + auth — Praetor's native replacement for
  * the Supabase SDK. Same chainable surface (.from().insert/update/select/
@@ -170,13 +173,10 @@ export function supabaseAdmin(): PraetorStoreClient {
     if (!realInitTried) {
       realInitTried = true;
       try {
-        // Direct dynamic import — works in both Node ESM and the bundled
-        // Fly deploy. The earlier createRequire approach broke under tsc's
-        // ESM output because import.meta.url isn't always resolvable.
-        // We can use require() here because tsconfig has esModuleInterop
-        // and the api package itself is CJS-output (commonjs target).
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const supabase = require("@supabase/supabase-js");
+        // Use the top-level createRequire bound to this module's URL.
+        // Bare `require()` would throw "require is not defined" in the ESM
+        // bundle Fly runs (api outputs ESM despite the api/tsconfig).
+        const supabase = _req("@supabase/supabase-js");
         realClient = supabase.createClient(url, key, {
           auth: { persistSession: false, autoRefreshToken: false },
         }) as PraetorStoreClient;
@@ -185,7 +185,7 @@ export function supabaseAdmin(): PraetorStoreClient {
         return realClient;
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.warn("[praetor-api] @supabase/supabase-js init failed:", (err as Error).message);
+        console.warn("[praetor-api] @supabase/supabase-js init failed:", (err as Error).message, (err as Error).stack);
       }
     }
   }
