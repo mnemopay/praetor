@@ -1,6 +1,6 @@
 {
   "name": "@praetor/computer-control",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Praetor-native computer-use session: PraetorScreen capture + audit + activity-bus streaming, with a pluggable input adapter slot for click/type/scroll/hotkey.",
   "type": "module",
   "main": "dist/index.js",

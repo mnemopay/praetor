@@ -1,6 +1,6 @@
 {
   "name": "@praetor/sdk",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Developer SDK for the Praetor API Economy",
   "type": "module",
   "main": "dist/index.js",

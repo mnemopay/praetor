@@ -1,9 +1,15 @@
 {
   "name": "@praetor/game",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Praetor web-native game engine. A charter declares a GameSpec; the renderer emits a single self-contained HTML game playable in any browser. Companion to @praetor/game-assets (Godot scaffolder).",
-  "keywords": ["game", "engine", "web", "praetor", "charter"],
+  "keywords": [
+    "game",
+    "engine",
+    "web",
+    "praetor",
+    "charter"
+  ],
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

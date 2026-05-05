@@ -1,6 +1,6 @@
 {
   "name": "@praetor/scrape",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Praetor scrape pack — native HTTP client (no third-party fetch lib), JSON-LD extractor, sitemap walker, X.com syndication endpoint, robots-aware. Crawl4AI / Playwright / Firecrawl are optional opt-in adapters.",
   "keywords": [
     "scrape",
