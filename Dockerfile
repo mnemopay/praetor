@@ -13,7 +13,7 @@
 # are the only runtime deps.
 
 # ─── Stage 1: build everything ──────────────────────────────────────────
-FROM node:20-bookworm-slim AS build
+FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ RUN npx tsc -b
 RUN npm prune --omit=dev
 
 # ─── Stage 2: slim runtime ──────────────────────────────────────────────
-FROM node:20-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
 ENV NODE_ENV=production
