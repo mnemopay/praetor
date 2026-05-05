@@ -1,7 +1,6 @@
 {
   "name": "@kpanks/game",
   "version": "0.1.0",
-  "private": true,
   "description": "Praetor web-native game engine. A charter declares a GameSpec; the renderer emits a single self-contained HTML game playable in any browser. Companion to @kpanks/game-assets (Godot scaffolder).",
   "keywords": [
     "game",
