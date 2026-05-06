@@ -88,12 +88,16 @@ const server = createServer(async (req, res) => {
       const id = randomBytes(4).toString("hex");
       const charterPath = join(missionDir, `temp-${id}.yaml`);
       
+      // Scale budget to goal scope — short prompts get $5, longer multi-step
+      // prompts get up to $15. Final ceiling is per-charter env DEFAULT_MISSION_BUDGET_USD.
+      const goalLen = prompt.length;
+      const scaledBudget = Math.min(15, Math.max(5, Math.ceil(goalLen / 100) * 2.5));
       const charterContent = `
 name: Dash Mission ${id}
 goal: |
   ${prompt.replace(/\n/g, "\n  ")}
 budget:
-  maxUsd: 5.00
+  maxUsd: ${scaledBudget.toFixed(2)}
   approvalThresholdUsd: 0.00
 agents:
   - role: developer

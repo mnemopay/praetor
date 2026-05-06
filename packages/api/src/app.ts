@@ -18,6 +18,7 @@ import { newMissionId, recordMissionChatMessage, startMissionRun } from "./runne
 import { mountActivityPersistence } from "./activity.js";
 import { createActivityRouter } from "./routes/activity.js";
 import { getToolCatalog } from "./tools.js";
+import { mountBilling, checkMissionCap, incrementMissionCount } from "./billing.js";
 
 export function createApp(): PraetorApp {
   const app = praetorHttp();
@@ -96,6 +97,14 @@ export function createApp(): PraetorApp {
     }
     const missionId = newMissionId();
     const userId = (req as AuthedRequest).user!.id;
+
+    // Tier-cap gate — free 5/mo, pro 100/mo, team unlimited
+    const cap = await checkMissionCap(userId);
+    if (!cap.allowed) {
+      res.status(402).json({ ok: false, error: cap.reason, tier: cap.tier, cap: cap.cap, used: cap.used, upgradeUrl: "https://app.praetor.mnemopay.com/billing" });
+      return;
+    }
+
     const installed = await listInstalledPlugins(userId);
     const charter = buildCharter({
       goal,
@@ -112,6 +121,7 @@ export function createApp(): PraetorApp {
       charterJson: charter as unknown as Record<string, unknown>,
     });
     void startMissionRun(missionId, charter);
+    void incrementMissionCount(userId);
     res.status(202).json({ ok: true, missionId });
   });
 
@@ -177,13 +187,8 @@ export function createApp(): PraetorApp {
     res.json({ ok: true, installed });
   });
 
-  app.get("/api/v1/billing", (_req, res) => {
-    res.json({
-      ok: true,
-      thresholdUsd: env.defaultBudgetUsd,
-      currentSpendUsd: 0,
-    });
-  });
+  // Stripe checkout + webhook + billing endpoints (replaces the old stub)
+  mountBilling(app);
 
   // ─── World-gen: list and serve scenes published via @kpanks/world-gen ──────
   const worldGenRoot = resolve(env.worldGenOutDir ?? join(env.repoRoot, "praetor-out", "scenes"));

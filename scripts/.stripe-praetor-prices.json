@@ -1,0 +1,53 @@
+{
+  "generatedAt": "2026-05-06T16:34:50.259Z",
+  "tiers": {
+    "pro": {
+      "productId": "prod_UQCwgV8TCejQsR",
+      "prices": {
+        "month": {
+          "id": "price_1TU8PP2ME7USiFirDH3MLZa2",
+          "lookupKey": "praetor_pro_monthly",
+          "amount": 2900
+        },
+        "year": {
+          "id": "price_1TU8PQ2ME7USiFir7mpY2UCo",
+          "lookupKey": "praetor_pro_yearly",
+          "amount": 29000
+        }
+      }
+    },
+    "team": {
+      "productId": "prod_UT4Y7wdDPNqoOt",
+      "prices": {
+        "month": {
+          "id": "price_1TU8PQ2ME7USiFirL4Iiynhs",
+          "lookupKey": "praetor_team_monthly",
+          "amount": 9900
+        },
+        "year": {
+          "id": "price_1TU8PR2ME7USiFireOSn93wp",
+          "lookupKey": "praetor_team_yearly",
+          "amount": 99000
+        }
+      }
+    },
+    "free": {
+      "productId": null,
+      "prices": {
+        "virtual": {
+          "id": "free",
+          "amount": 0
+        }
+      }
+    },
+    "enterprise": {
+      "productId": null,
+      "prices": {
+        "virtual": {
+          "id": "enterprise_invoice_only",
+          "amount": null
+        }
+      }
+    }
+  }
+}

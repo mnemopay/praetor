@@ -30,3 +30,7 @@ praetor/
 .praetor/cache/
 out/
 hello.txt
+
+# Mission audit bundles (regenerable per-charter outputs)
+audit-bundle*/
+

@@ -1,0 +1,112 @@
+# Praetor — Dele Gold mocap pipeline charter.
+#
+# Wraps the dele-mocap pipeline (capture.py + process.py) and a downstream
+# Remotion render as a deterministic Praetor mission. No LLM in the
+# capture/render path — pure determinism.
+#
+# Stages executed:
+#   Stage 2 — process the input MP4 through MediaPipe Holistic / FreeMoCap
+#             via dele-mocap/process.py. Produces landmarks.json + BVH.
+#   Stage 4 — render the final Dele short via Remotion in dele-video/, with
+#             the produced landmarks.json passed through --props.
+#   Stage 6 — write a session manifest under dele-mocap/processed/ recording
+#             which mocap take fed which output MP4 (for traceability).
+#
+# Stage 1 (webcam capture) is intentionally NOT in the charter — capture is
+# physical-world I/O that needs Jerry on-camera. Run capture.py manually
+# first, then point this charter at the resulting MP4.
+#
+# Tools used (from packages/cli/src/index.ts registry):
+#   - sandbox_run_command  — shell out to python / npx remotion
+#   - write_file           — emit the session manifest
+#
+# These tool names are verified against the Praetor tool registry — no
+# inventions. Search packages/cli/src/index.ts for `name: "sandbox_run_command"`
+# and `name: "write_file"` (the latter lives in packages/coding-agent).
+#
+# Run with:
+#   node packages/cli/dist/index.js run charters/mocap-pipeline.yaml \
+#        --article12 ./audit-bundle/
+#
+# Override input/output paths via env vars before invoking:
+#   $env:DELE_MOCAP_INPUT  = "C:/Users/bizsu/Projects/dele-mocap/captures/dele_take01.mp4"
+#   $env:DELE_MOCAP_OUTDIR = "C:/Users/bizsu/Projects/dele-mocap/processed/dele_take01"
+#   $env:DELE_RENDER_NAME  = "DeleMocapShort"
+#   $env:DELE_RENDER_OUT   = "C:/Users/bizsu/Projects/dele-video/out/dele_mocap_01.mp4"
+
+name: dele-mocap-pipeline
+goal: |
+  Run dele-mocap process.py on a captured MP4, then render the resulting
+  motion data through the dele-video Remotion composition. Emit a session
+  manifest tying capture -> mocap -> rendered output.
+
+agents:
+  - role: coding
+
+# Zero LLM spend. The whole pipeline is deterministic shell + Python +
+# Node calls. If we ever add LLM-driven script generation upstream, raise
+# this cap; today we keep it at $0 to prove there's no surprise spend.
+budget:
+  maxUsd: 0
+  approvalThresholdUsd: 0
+
+# Local sandbox is fine — capture/render is laptop-local, no remote IO.
+sandbox:
+  kind: auto
+
+steps:
+  # ─── Stage 2: FreeMoCap / MediaPipe processing ─────────────────────────
+  # Drives dele-mocap/process.py with auto backend selection. process.py
+  # falls back from FreeMoCap -> MediaPipe internally if the FreeMoCap
+  # headless path hangs (known PySide6 issue on Windows).
+  - action: sandbox_run_command
+    args:
+      command: >
+        C:/Users/bizsu/Projects/dele-mocap/.venv/Scripts/python.exe
+        C:/Users/bizsu/Projects/dele-mocap/process.py
+        --input  C:/Users/bizsu/Projects/dele-mocap/captures/dele_take01.mp4
+        --output C:/Users/bizsu/Projects/dele-mocap/processed/dele_take01
+        --backend auto
+      timeoutMs: 600000
+
+  # ─── Stage 4: Remotion render ──────────────────────────────────────────
+  # Reuses the existing dele-video Remotion entrypoint. The mocap data is
+  # passed through --props as a path to landmarks.json. The composition
+  # `DeleMocapShort` is a forthcoming Phase 6 task — until it lands this
+  # step will fail loudly, which is what we want (it surfaces the missing
+  # piece instead of silently producing the wrong MP4).
+  - action: sandbox_run_command
+    args:
+      command: >
+        npx --yes remotion render
+        C:/Users/bizsu/Projects/dele-video/src/index.ts
+        DeleMocapShort
+        C:/Users/bizsu/Projects/dele-video/out/dele_mocap_01.mp4
+        --props={"mocapJson":"C:/Users/bizsu/Projects/dele-mocap/processed/dele_take01/landmarks.json"}
+      cwd: C:/Users/bizsu/Projects/dele-video
+      timeoutMs: 1200000
+
+  # ─── Stage 6: session manifest ─────────────────────────────────────────
+  # Lightweight provenance: which capture -> which mocap session -> which
+  # rendered MP4 -> when. Enables Article 12 audit bundling.
+  - action: write_file
+    args:
+      path: C:/Users/bizsu/Projects/dele-mocap/processed/dele_take01/charter_manifest.json
+      content: |
+        {
+          "charter": "dele-mocap-pipeline",
+          "capture_mp4": "captures/dele_take01.mp4",
+          "mocap_dir":   "processed/dele_take01",
+          "rendered_mp4": "C:/Users/bizsu/Projects/dele-video/out/dele_mocap_01.mp4",
+          "backend": "auto (freemocap|mediapipe)",
+          "license_posture": "AGPL artifact-only - MP4 output not infected"
+        }
+
+outputs:
+  - C:/Users/bizsu/Projects/dele-mocap/processed/dele_take01/landmarks.json
+  - C:/Users/bizsu/Projects/dele-mocap/processed/dele_take01/session.json
+  - C:/Users/bizsu/Projects/dele-mocap/processed/dele_take01/charter_manifest.json
+  - C:/Users/bizsu/Projects/dele-video/out/dele_mocap_01.mp4
+
+compliance:
+  article12: true
