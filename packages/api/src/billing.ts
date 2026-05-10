@@ -245,12 +245,12 @@ export function mountBilling(app: PraetorApp): void {
     const userId = (req as AuthedRequest).user!.id;
     const tier = await getUserTier(userId);
     const limits = TIER_LIMITS[tier];
+    const missions = await getMissionsThisMonth(userId);
     res.json({
       ok: true,
       tier,
       limits,
-      // TODO: pull current-month mission count + LLM spend from db
-      currentMonth: { missions: 0, llmSpendUsd: 0 },
+      currentMonth: { missions, llmSpendUsd: 0 },
       pricing: {
         pro: { monthly: { lookupKey: "praetor_pro_monthly", priceUsd: 29 }, yearly: { lookupKey: "praetor_pro_yearly", priceUsd: 290 } },
         team: { monthly: { lookupKey: "praetor_team_monthly", priceUsd: 99 }, yearly: { lookupKey: "praetor_team_yearly", priceUsd: 990 } },

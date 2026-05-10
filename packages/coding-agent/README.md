@@ -1,7 +1,11 @@
-# @kpanks/coding-agent
+# @mnemopay/coding-agent
 
-Praetor's coding agent. A `NativePraetorEngine` preconfigured with a curated
-tool subset and a system prompt focused on disciplined code changes.
+Coding agent for the MnemoPay toolkit. A native engine preconfigured with a
+curated tool subset and a system prompt focused on disciplined code changes —
+suitable as an authoring-time companion for `@mnemopay/sdk` and the
+`@blackpig/forge` engine.
+
+> Renamed from `@kpanks/coding-agent` 2026-05-09. Same code, new home.
 
 ## Tool surface
 

@@ -1,0 +1,32 @@
+# Praetor dashboard — static SPA served via nginx on Fly.
+# Hostname: app.praetor.mnemopay.com (cert issued, app=praetor-site)
+#
+# Update flow:
+#   cd packages/dashboard
+#   npm run build          # produces dist/
+#   flyctl deploy --remote-only
+
+app = "praetor-site"
+primary_region = "dfw"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[http_service.checks]]
+  grace_period = "5s"
+  interval = "30s"
+  method = "GET"
+  path = "/healthz"
+  timeout = "5s"
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

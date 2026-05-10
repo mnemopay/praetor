@@ -47,10 +47,17 @@ export const activeMissionPids = new Map<string, number>();
 const ACTIVITY_PREFIX = "::praetor-activity::";
 
 export function toYaml(charter: Charter): string {
-  return stringify({
-    ...charter,
-    plugins: charter.plugins && charter.plugins.length > 0 ? charter.plugins : ["@kpanks/seo"],
-  });
+  // YAML treats `@` as a reserved scalar prefix, so unquoted plugin names
+  // like "@kpanks/seo" produce parser errors when the CLI re-reads the
+  // charter. Force double-quoting on all string scalars.
+  // Also: the CLI plugin loader silently crashes on `plugins: []` (empty
+  // array). Omit the key entirely when no plugins are declared rather
+  // than emitting an empty list.
+  const out: Record<string, unknown> = { ...charter };
+  if (!charter.plugins || charter.plugins.length === 0) {
+    delete out.plugins;
+  }
+  return stringify(out, { defaultStringType: "QUOTE_DOUBLE", defaultKeyType: "PLAIN" });
 }
 
 export async function startMissionRun(missionId: string, charter: Charter): Promise<void> {
@@ -72,10 +79,17 @@ export async function startMissionRun(missionId: string, charter: Charter): Prom
   });
   activeMissionPids.set(missionId, child.pid ?? 0);
   let stdoutCarry = "";
+  let resultStatus: "completed" | "failed" | undefined;
 
   child.stdout.on("data", async (chunk: Buffer) => {
     const text = chunk.toString();
     stdoutCarry = bridgeActivityLines(missionId, stdoutCarry + text);
+    // Sniff the final result JSON blob the CLI prints. The CLI exits 0 even
+    // on internal errors, so we trust the result.status field, not exit code.
+    // CLI emits one of: "ok" (success), "halted" (FiscalGate cap hit),
+    // "error" (mission failed). Map all non-"ok" to "failed".
+    const m = /"status"\s*:\s*"(ok|halted|error|completed|failed)"/g.exec(text);
+    if (m) resultStatus = m[1] === "ok" || m[1] === "completed" ? "completed" : "failed";
     logStream.write(text);
     await appendMissionLog(missionId, text);
   });
@@ -88,7 +102,9 @@ export async function startMissionRun(missionId: string, charter: Charter): Prom
 
   child.on("close", async (code) => {
     activeMissionPids.delete(missionId);
-    await updateMissionStatus(missionId, code === 0 ? "completed" : "failed");
+    // Prefer parsed result.status. Fall back to exit code if no status seen.
+    const final = resultStatus ?? (code === 0 ? "completed" : "failed");
+    await updateMissionStatus(missionId, final);
     logStream.end();
   });
 }

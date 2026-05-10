@@ -147,10 +147,38 @@ function createDevModeShim(): MinimalAuthClient {
 import { renderMarkdown as praetorRenderMarkdown } from "./praetor_markdown.js";
 import { ActivityPanel, type ActivityEvent } from "./components/ActivityPanel.js";
 import { openActivityStream, type ActivityStreamHandle } from "./eventStream.js";
+import { renderTheater, type Theater } from "./views/theater/index.js";
 
-type Route = "chat" | "missions" | "audit" | "billing" | "marketplace" | "tools" | "world";
-type Mission = { id: string; status: string; goal: string; created_at: string };
+type Route = "overview" | "chat" | "missions" | "audit" | "theater" | "billing" | "marketplace" | "tools" | "world" | "charters";
+type Mission = { id: string; status: string; goal: string; created_at: string; budget?: number; spent_usd?: number };
 type Plugin = { name: string; version: string; provider: string; description: string };
+type BillingTier = "free" | "pro" | "team" | "enterprise";
+type BillingPayload = {
+  ok: boolean;
+  tier: BillingTier;
+  limits: {
+    missionCapPerMonth: number | null;
+    llmSpendCapUsd: number;
+    byokAboveCap: boolean;
+    articleTwelveAuditAllowed: boolean;
+    marketplacePublishAllowed: boolean;
+    seatsIncluded: number;
+    auditRetentionMonths: number;
+  };
+  currentMonth: { missions: number; llmSpendUsd: number };
+  pricing: {
+    pro: { monthly: { lookupKey: string; priceUsd: number }; yearly: { lookupKey: string; priceUsd: number } };
+    team: { monthly: { lookupKey: string; priceUsd: number }; yearly: { lookupKey: string; priceUsd: number } };
+  };
+};
+type ApiKey = {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  createdAt?: string | null;
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
+};
 type ToolMetadata = {
   origin: "native" | "adapter" | "mock" | "experimental";
   capability: string;
@@ -186,9 +214,11 @@ type WorldScene = {
 type ChatMessage = { id: string; role: "user" | "praetor" | "system"; content: string; missionId?: string; status?: string };
 type AgentChoice = "native" | "coding" | "research" | "world-gen";
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8788").replace(/\/$/, "");
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? "";
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
+const IS_PRAETOR_PROD_HOST =
+  typeof window !== "undefined" && /(^|\.)praetor\.mnemopay\.com$/.test(window.location.hostname);
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? (IS_PRAETOR_PROD_HOST ? "https://api.praetor.mnemopay.com" : "http://127.0.0.1:8788")).replace(/\/$/, "");
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? (IS_PRAETOR_PROD_HOST ? "https://awjqnxlslggxlfjmoubi.supabase.co" : "");
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? (IS_PRAETOR_PROD_HOST ? "sb_publishable_3j1Oq9zyyAh3668v_vpGvA_83vFeatd" : "");
 const SUPABASE_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 const DEV_MODE_BYPASS = import.meta.env.VITE_PRAETOR_DEV_MODE === "1";
 
@@ -277,15 +307,24 @@ if (!app) throw new Error("dashboard: #app container not found");
 const supabase = buildAuthClient();
 
 let session: Session | null = null;
-let currentRoute: Route = "chat";
+let currentRoute: Route = initialRoute();
 let selectedMissionId: string | null = null;
 let chatLog: ChatMessage[] = [];
 const pollers = new Map<string, number>();
 let activityPanel: ActivityPanel | null = null;
 let activityStream: ActivityStreamHandle | null = null;
 let activityMissionId: string | null = null;
+let theaterInstance: Theater | null = null;
 let selectedAgent: AgentChoice = "native";
 let cachedTools: ToolCatalogItem[] | null = null;
+
+function initialRoute(): Route {
+  if (typeof window === "undefined") return "overview";
+  const route = window.location.pathname.replace(/^\/+/, "").split("/")[0] as Route;
+  return route && ["overview", "chat", "charters", "missions", "audit", "theater", "tools", "world", "billing", "marketplace"].includes(route)
+    ? route
+    : "overview";
+}
 
 async function fetchToolsOnce() {
   if (cachedTools !== null) return;
@@ -418,9 +457,12 @@ function render() {
         </div>
       </header>
       <nav class="tabs">
+        ${tabButton("overview", "Overview")}
         ${tabButton("chat", "Chat")}
+        ${tabButton("charters", "Charters")}
         ${tabButton("missions", "Missions")}
         ${tabButton("audit", "Audit")}
+        ${tabButton("theater", "Theater")}
         ${tabButton("tools", "Tools")}
         ${tabButton("world", "World")}
         ${tabButton("billing", "Billing")}
@@ -550,14 +592,279 @@ async function pingHealth() {
 }
 
 async function renderRoute() {
+  // Tear down theater instance whenever we leave its route. Each route owns
+  // its own DOM lifecycle; the theater also owns an SSE handle + scrub timer.
+  if (currentRoute !== "theater" && theaterInstance) {
+    theaterInstance.destroy();
+    theaterInstance = null;
+  }
   switch (currentRoute) {
+    case "overview": return renderOverview();
     case "chat": return renderChat();
+    case "charters": return renderCharters();
     case "missions": return renderMissions();
     case "audit": return renderAudit();
+    case "theater": return renderTheaterRoute();
     case "tools": return renderTools();
     case "billing": return renderBilling();
     case "marketplace": return renderMarketplace();
     case "world": return renderWorld();
+  }
+}
+
+async function renderTheaterRoute() {
+  const view = document.getElementById("view");
+  if (!view) return;
+  if (!selectedMissionId) {
+    view.innerHTML = `<p class="card-hint">Select a mission first — Missions tab → click a mission card → Theater.</p>`;
+    return;
+  }
+  if (!session) return;
+  // Reset host so prior theater DOM doesn't leak.
+  view.innerHTML = "";
+  theaterInstance?.destroy();
+  theaterInstance = await renderTheater(view, {
+    apiBase: API_BASE,
+    token: session.access_token,
+    missionId: selectedMissionId,
+    authedFetch,
+  });
+}
+
+// ─── FiscalGate gauge + Article 12 badge — small reusable HTML primitives ─────
+
+async function renderOverview() {
+  const view = document.getElementById("view");
+  if (!view) return;
+  view.innerHTML = `<p class="card-hint">Loading command center...</p>`;
+  try {
+    const [billingRes, missionsRes, keysRes] = await Promise.all([
+      authedFetch("/api/v1/billing"),
+      authedFetch("/api/v1/missions"),
+      authedFetch("/api/v1/keys").catch(() => null),
+    ]);
+    const billing = (await billingRes.json()) as BillingPayload;
+    const missionsPayload = await missionsRes.json();
+    const keysPayload = keysRes ? await keysRes.json() : { keys: [] };
+    const missions = (missionsPayload.missions ?? []) as Mission[];
+    const keys = ((keysPayload.keys ?? []) as ApiKey[]).filter((k) => !k.revokedAt);
+    const running = missions.filter((m) => m.status === "running" || m.status === "queued").length;
+    const completed = missions.filter((m) => m.status === "completed" || m.status === "succeeded" || m.status === "ok").length;
+    const missionCap = billing.limits.missionCapPerMonth;
+    const missionUsage = missionCap ? Math.min(100, (billing.currentMonth.missions / missionCap) * 100) : 100;
+    const spendUsage = billing.limits.llmSpendCapUsd > 0
+      ? Math.min(100, (billing.currentMonth.llmSpendUsd / billing.limits.llmSpendCapUsd) * 100)
+      : 0;
+    const latest = missions.slice(0, 4);
+
+    view.innerHTML = `
+      <div class="overview-grid">
+        <section class="overview-hero">
+          <div>
+            <p class="card-label">Mission runtime</p>
+            <h2>Charter-driven. Fiscally gated. Audit logged.</h2>
+            <p class="overview-copy">Praetor turns agent work into governed missions with caps, logs, receipts, and a path to paid execution.</p>
+          </div>
+          <pre class="ascii-mark" aria-hidden="true">PRAETOR
+| charter
+| fiscal_gate
+| article12
+| receipt</pre>
+        </section>
+        <section class="overview-rail">
+          ${overviewMetric("Plan", billing.tier.toUpperCase(), `${missionCap === null ? "Unlimited" : missionCap} missions/mo`)}
+          ${overviewMetric("Active", String(running), "queued or running")}
+          ${overviewMetric("Sealed", String(completed), "completed missions")}
+          ${overviewMetric("Keys", String(keys.length), "active API keys")}
+        </section>
+        <section class="card overview-card span-2">
+          <div class="section-head">
+            <div>
+              <p class="card-label">Monthly usage</p>
+              <p class="card-hint">Plan gates enforced by the API before every mission starts.</p>
+            </div>
+            <button class="btn-secondary overview-go" data-route-target="billing">Manage billing</button>
+          </div>
+          ${usageBar("Missions", billing.currentMonth.missions, missionCap, missionUsage)}
+          ${usageBar("LLM wallet", billing.currentMonth.llmSpendUsd, billing.limits.llmSpendCapUsd, spendUsage, "$")}
+        </section>
+        <section class="card overview-card">
+          <div class="section-head">
+            <div>
+              <p class="card-label">Next action</p>
+              <p class="card-value compact">Run a governed mission</p>
+            </div>
+          </div>
+          <p class="card-hint">Start with a charter for predictable scope, or chat if you want Praetor to shape the mission.</p>
+          <div class="quick-actions">
+            <button class="btn-primary overview-go" data-route-target="charters">Open charters</button>
+            <button class="btn-secondary overview-go" data-route-target="chat">Open chat</button>
+          </div>
+        </section>
+        <section class="card overview-card">
+          <div class="section-head">
+            <div>
+              <p class="card-label">Trust surface</p>
+              <p class="card-value compact">${billing.limits.articleTwelveAuditAllowed ? "Article 12 enabled" : "Audit upgrade gated"}</p>
+            </div>
+          </div>
+          <p class="card-hint">${billing.limits.articleTwelveAuditAllowed ? `${billing.limits.auditRetentionMonths} months retention on current plan.` : "Upgrade to Pro for EU AI Act audit bundles."}</p>
+          <button class="btn-secondary overview-go" data-route-target="audit">Inspect audit logs</button>
+        </section>
+        <section class="card overview-card span-2">
+          <div class="section-head">
+            <div>
+              <p class="card-label">Recent missions</p>
+              <p class="card-hint">Click any mission to open its audit trail.</p>
+            </div>
+            <button class="btn-secondary overview-go" data-route-target="missions">All missions</button>
+          </div>
+          <div class="mini-mission-list">
+            ${latest.length ? latest.map((m) => `
+              <button class="mini-mission" data-mission-id="${escapeHtml(m.id)}">
+                <span class="status-pill ${statusClass(m.status)}">${escapeHtml(m.status)}</span>
+                <span>${escapeHtml(m.goal)}</span>
+                <em>${new Date(m.created_at).toLocaleDateString()}</em>
+              </button>
+            `).join("") : `<p class="card-hint">No missions yet. Launch one from Charters or Chat.</p>`}
+          </div>
+        </section>
+      </div>
+    `;
+
+    for (const btn of Array.from(document.querySelectorAll<HTMLButtonElement>(".overview-go"))) {
+      btn.addEventListener("click", () => {
+        currentRoute = btn.dataset.routeTarget as Route;
+        render();
+      });
+    }
+    for (const btn of Array.from(document.querySelectorAll<HTMLButtonElement>(".mini-mission"))) {
+      btn.addEventListener("click", () => {
+        selectedMissionId = btn.dataset.missionId ?? null;
+        currentRoute = "audit";
+        render();
+      });
+    }
+  } catch (err) {
+    view.innerHTML = `<p class="card-hint error">Network error: ${escapeHtml((err as Error).message)}</p>`;
+  }
+}
+
+function overviewMetric(label: string, value: string, hint: string): string {
+  return `
+    <div class="card overview-metric">
+      <p class="card-label">${escapeHtml(label)}</p>
+      <p class="card-value">${escapeHtml(value)}</p>
+      <p class="card-hint">${escapeHtml(hint)}</p>
+    </div>
+  `;
+}
+
+function usageBar(label: string, used: number, cap: number | null, pct: number, prefix = ""): string {
+  const usedText = `${prefix}${Number(used).toFixed(prefix ? 2 : 0)}`;
+  const capText = cap === null ? "unlimited" : `${prefix}${Number(cap).toFixed(prefix ? 2 : 0)}`;
+  return `
+    <div class="usage-row">
+      <div>
+        <strong>${escapeHtml(label)}</strong>
+        <span>${escapeHtml(usedText)} / ${escapeHtml(capText)}</span>
+      </div>
+      <div class="usage-track"><span style="width:${pct.toFixed(1)}%"></span></div>
+    </div>
+  `;
+}
+
+function fiscalGateGauge(m: Mission): string {
+  const budget = Number(m.budget ?? 0);
+  const spent = Number(m.spent_usd ?? 0);
+  const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+  const halted = m.status === "halted-budget" || (budget > 0 && spent > budget);
+  const fillClass = halted ? "halted" : pct > 80 ? "warn" : "ok";
+  return `
+    <div class="fg-gauge" title="FiscalGate: $${spent.toFixed(2)} of $${budget.toFixed(2)} cap">
+      <div class="fg-fill ${fillClass}" style="width: ${pct.toFixed(1)}%"></div>
+      <span class="fg-label">$${spent.toFixed(2)} <span class="fg-cap">/ $${budget.toFixed(2)}</span></span>
+    </div>
+  `;
+}
+
+function article12Badge(missionId: string, status: string): string {
+  // Only completed/sealed missions can export. Show always for visibility, disable on incomplete.
+  const complete = ["succeeded", "completed", "ok", "halted-budget", "failed"].includes(status);
+  return `
+    <a class="badge a12 ${complete ? "" : "muted"}"
+       href="${complete ? API_BASE + "/api/v1/missions/" + missionId + "/article12" : "#"}"
+       download="article12-${missionId}.json"
+       ${complete ? "" : 'aria-disabled="true" tabindex="-1" onclick="return false"'}
+       title="${complete ? "Download EU AI Act Article 12 audit bundle (Merkle-rooted)" : "Bundle exports after mission seals"}">
+      <span class="dot"></span>
+      <span>Article 12</span>
+      ${complete ? '<span class="dl">↓</span>' : ""}
+    </a>
+  `;
+}
+
+// ─── Charter Gallery ──────────────────────────────────────────────────────────
+
+async function renderCharters() {
+  const { CHARTER_TEMPLATES, templatesByCategory } = await import("./charterTemplates.js");
+  const view = document.getElementById("view");
+  if (!view) return;
+  const groups = templatesByCategory();
+  const categoryLabel: Record<string, string> = { growth: "Growth", engineering: "Engineering", compliance: "Compliance", research: "Research", ops: "Ops" };
+  const cat = (k: string) => categoryLabel[k] ?? k;
+
+  view.innerHTML = `
+    <div class="stack">
+      <header>
+        <p class="card-label">Charter Gallery · ${CHARTER_TEMPLATES.length} prebuilt missions</p>
+        <p class="card-hint">One-click runs. Each charter is a signed YAML mission with a fiscal cap. Pick one and Praetor executes — no setup.</p>
+      </header>
+      ${Object.entries(groups).map(([k, items]) => `
+        <section class="charter-section">
+          <h3 class="charter-section-title">${cat(k)}</h3>
+          <div class="charter-grid">
+            ${items.map((t) => `
+              <article class="charter-card" data-template-id="${t.id}">
+                <header>
+                  <h4>${escapeHtml(t.title)}</h4>
+                  <span class="charter-cost">~$${t.estCostUsd.toFixed(2)}</span>
+                </header>
+                <p class="charter-desc">${escapeHtml(t.description)}</p>
+                <p class="charter-tools">${t.tools.map((tt) => `<code>${escapeHtml(tt)}</code>`).join(" ")}</p>
+                <footer>
+                  <span class="charter-time">~${t.estDurationSec}s</span>
+                  <button class="btn-primary btn-charter-run" data-template-id="${t.id}">Run charter</button>
+                </footer>
+              </article>
+            `).join("")}
+          </div>
+        </section>
+      `).join("")}
+    </div>
+  `;
+
+  for (const btn of Array.from(document.querySelectorAll<HTMLButtonElement>(".btn-charter-run"))) {
+    btn.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const tplId = (event.currentTarget as HTMLElement).dataset.templateId;
+      const tpl = CHARTER_TEMPLATES.find((t) => t.id === tplId);
+      if (!tpl) return;
+      btn.disabled = true;
+      btn.textContent = "Launching…";
+      try {
+        const res = await authedFetch("/api/v1/missions", { method: "POST", body: JSON.stringify({ goal: tpl.goal, budgetUsd: Math.max(tpl.estCostUsd * 3, 0.5) }) });
+        const j = await res.json();
+        if (!res.ok || !j.ok) throw new Error(j.error ?? res.statusText);
+        currentRoute = "audit";
+        selectedMissionId = j.missionId;
+        render();
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = "Run charter";
+        alert(`Charter failed to launch: ${(err as Error).message}`);
+      }
+    });
   }
 }
 
@@ -843,9 +1150,16 @@ async function renderMissions() {
         <div class="cards">
           ${missions.map((m) => `
             <div class="card mission-row" data-mission-id="${m.id}">
-              <p class="card-label"><span class="status-pill ${statusClass(m.status)}">${m.status}</span></p>
+              <div class="mission-row-head">
+                <span class="status-pill ${statusClass(m.status)}">${m.status}</span>
+                ${article12Badge(m.id, m.status)}
+              </div>
               <p class="card-value">${escapeHtml(m.goal)}</p>
+              ${m.budget ? fiscalGateGauge(m) : ""}
               <p class="card-hint">${m.id} · ${new Date(m.created_at).toLocaleString()}</p>
+              <div class="mission-row-actions">
+                <button class="btn-secondary mission-open-theater" data-mission-id="${m.id}" type="button">Open in Theater ↗</button>
+              </div>
             </div>
           `).join("")}
         </div>
@@ -860,6 +1174,14 @@ async function renderMissions() {
       await authedFetch("/api/v1/missions", { method: "POST", body: JSON.stringify({ goal }) });
       await renderMissions();
     });
+    for (const btn of Array.from(document.querySelectorAll<HTMLButtonElement>(".mission-open-theater"))) {
+      btn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        selectedMissionId = btn.dataset.missionId ?? null;
+        currentRoute = "theater";
+        render();
+      });
+    }
     for (const row of Array.from(document.querySelectorAll<HTMLElement>(".mission-row"))) {
       row.addEventListener("click", () => {
         selectedMissionId = row.dataset.missionId ?? null;
@@ -893,16 +1215,25 @@ async function renderAudit() {
     view.innerHTML = `
       <div class="stack">
         <header class="audit-header">
-          <div>
+          <div class="audit-header-left">
             <p class="card-label">Mission</p>
             <p class="card-value">${escapeHtml(payload.mission.goal)}</p>
             <p class="card-hint">${selectedMissionId}</p>
           </div>
-          <span class="status-pill ${statusClass(payload.mission.status)}">${payload.mission.status}</span>
+          <div class="audit-header-right">
+            <span class="status-pill ${statusClass(payload.mission.status)}">${payload.mission.status}</span>
+            ${article12Badge(selectedMissionId!, payload.mission.status)}
+            <button class="btn-secondary audit-open-theater" type="button">Open in Theater ↗</button>
+          </div>
         </header>
+        ${payload.mission.budget ? fiscalGateGauge(payload.mission) : ""}
         <pre class="ledger">${escapeHtml(logs.join("\n") || "(no log lines yet)")}</pre>
       </div>
     `;
+    document.querySelector<HTMLButtonElement>(".audit-open-theater")?.addEventListener("click", () => {
+      currentRoute = "theater";
+      render();
+    });
   } catch (err) {
     view.innerHTML = `<p class="card-hint error">Network error: ${escapeHtml((err as Error).message)}</p>`;
   }
@@ -913,25 +1244,188 @@ async function renderAudit() {
 async function renderBilling() {
   const view = document.getElementById("view");
   if (!view) return;
+  view.innerHTML = `<p class="card-hint">Loading billing...</p>`;
   try {
-    const res = await authedFetch("/api/v1/billing");
-    const payload = await res.json();
+    const [billingRes, keysRes] = await Promise.all([
+      authedFetch("/api/v1/billing"),
+      authedFetch("/api/v1/keys"),
+    ]);
+    const payload = (await billingRes.json()) as BillingPayload;
+    const keyPayload = await keysRes.json();
+    if (!billingRes.ok || !payload.ok) {
+      view.innerHTML = `<p class="card-hint error">Failed to load billing: ${escapeHtml((payload as any).error ?? billingRes.statusText)}</p>`;
+      return;
+    }
+    const keys = (keyPayload.keys ?? []) as ApiKey[];
+    const missionCap = payload.limits.missionCapPerMonth;
+    const missionUsage = missionCap ? Math.min(100, (payload.currentMonth.missions / missionCap) * 100) : 100;
+    const spendUsage = payload.limits.llmSpendCapUsd > 0
+      ? Math.min(100, (payload.currentMonth.llmSpendUsd / payload.limits.llmSpendCapUsd) * 100)
+      : 0;
     view.innerHTML = `
-      <div class="cards">
-        <div class="card">
-          <p class="card-label">Threshold USD</p>
-          <p class="card-value">$${Number(payload.thresholdUsd ?? 0).toFixed(2)}</p>
-          <p class="card-hint">Default mission budget</p>
-        </div>
-        <div class="card">
-          <p class="card-label">Current spend USD</p>
-          <p class="card-value">$${Number(payload.currentSpendUsd ?? 0).toFixed(2)}</p>
-          <p class="card-hint">Settled via MnemoPay</p>
-        </div>
+      <div class="billing-shell">
+        <section class="billing-head">
+          <div>
+            <p class="card-label">Billing and access</p>
+            <h2>${payload.tier.toUpperCase()} plan</h2>
+            <p class="card-hint">${missionCap === null ? "Unlimited missions" : `${missionCap} missions per month`} · $${payload.limits.llmSpendCapUsd}/mo LLM wallet · ${payload.limits.seatsIncluded} seat${payload.limits.seatsIncluded === 1 ? "" : "s"}</p>
+          </div>
+          <button class="btn-primary checkout-btn" data-lookup-key="${escapeHtml(payload.pricing.pro.monthly.lookupKey)}">Upgrade to Pro</button>
+        </section>
+
+        <section class="cards">
+          ${planCard("Free", "$0", "5 missions/mo", ["$1 LLM cap", "Public charters", "No Article 12 audit"], payload.tier === "free")}
+          ${planCard("Pro", "$29", "100 missions/mo", ["$25 LLM cap", "Private charters", "EU AI Act audit bundles"], payload.tier === "pro", payload.pricing.pro.monthly.lookupKey, payload.pricing.pro.yearly.lookupKey)}
+          ${planCard("Team", "$99", "Unlimited missions", ["$100 LLM cap", "5 seats", "Marketplace publish"], payload.tier === "team", payload.pricing.team.monthly.lookupKey, payload.pricing.team.yearly.lookupKey)}
+          ${planCard("Enterprise", "Custom", "Governance stack", ["SLA", "On-prem", "KYA and 7y retention"], payload.tier === "enterprise")}
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="card-label">Current month</p>
+              <p class="card-hint">These counters are the gates Praetor checks before running work.</p>
+            </div>
+          </div>
+          ${usageBar("Missions", payload.currentMonth.missions, missionCap, missionUsage)}
+          ${usageBar("LLM wallet", payload.currentMonth.llmSpendUsd, payload.limits.llmSpendCapUsd, spendUsage, "$")}
+        </section>
+
+        <section class="card">
+          <div class="section-head">
+            <div>
+              <p class="card-label">API keys</p>
+              <p class="card-hint">Use these with the SDK, CLI, and worker integrations. Plaintext appears once.</p>
+            </div>
+            <form id="keyForm" class="key-form">
+              <input id="keyName" class="field" placeholder="ci-prod" maxlength="64" />
+              <button class="btn-primary" type="submit">Create key</button>
+            </form>
+          </div>
+          <div id="newKeyReveal"></div>
+          <div class="key-list">
+            ${keys.length ? keys.map(renderApiKeyRow).join("") : `<p class="card-hint">No API keys yet.</p>`}
+          </div>
+        </section>
       </div>
     `;
+    wireBillingHandlers();
   } catch (err) {
     view.innerHTML = `<p class="card-hint error">Network error: ${escapeHtml((err as Error).message)}</p>`;
+  }
+}
+
+function planCard(
+  name: string,
+  price: string,
+  headline: string,
+  features: string[],
+  active: boolean,
+  monthlyLookup?: string,
+  yearlyLookup?: string,
+): string {
+  const action = monthlyLookup
+    ? `<div class="plan-actions">
+        <button class="btn-primary checkout-btn" data-lookup-key="${escapeHtml(monthlyLookup)}">${active ? "Current monthly" : "Choose monthly"}</button>
+        ${yearlyLookup ? `<button class="btn-secondary checkout-btn" data-lookup-key="${escapeHtml(yearlyLookup)}">Yearly</button>` : ""}
+      </div>`
+    : name === "Enterprise"
+      ? `<a class="btn-secondary" href="mailto:jeremiah@getbizsuite.com">Contact sales</a>`
+      : `<span class="status-pill ${active ? "ok" : ""}">${active ? "Current plan" : "Starter"}</span>`;
+  return `
+    <article class="card plan-card ${active ? "active-plan" : ""}">
+      <p class="card-label">${active ? "Current" : "Plan"}</p>
+      <div class="plan-price"><strong>${escapeHtml(price)}</strong>${price.startsWith("$") ? "<span>/mo</span>" : ""}</div>
+      <p class="card-value compact">${escapeHtml(name)}</p>
+      <p class="card-hint">${escapeHtml(headline)}</p>
+      <ul>${features.map((f) => `<li>${escapeHtml(f)}</li>`).join("")}</ul>
+      ${action}
+    </article>
+  `;
+}
+
+function renderApiKeyRow(key: ApiKey): string {
+  const created = key.createdAt ? new Date(key.createdAt).toLocaleString() : "unknown";
+  const revoked = Boolean(key.revokedAt);
+  return `
+    <div class="api-key-row ${revoked ? "revoked" : ""}">
+      <div>
+        <strong>${escapeHtml(key.name)}</strong>
+        <span>${escapeHtml(key.keyPrefix)}... · created ${escapeHtml(created)}</span>
+      </div>
+      <button class="btn-secondary revoke-key" data-key-id="${escapeHtml(key.id)}" ${revoked ? "disabled" : ""}>${revoked ? "Revoked" : "Revoke"}</button>
+    </div>
+  `;
+}
+
+function wireBillingHandlers() {
+  for (const btn of Array.from(document.querySelectorAll<HTMLButtonElement>(".checkout-btn"))) {
+    btn.addEventListener("click", async () => {
+      const lookupKey = btn.dataset.lookupKey;
+      if (!lookupKey) return;
+      btn.disabled = true;
+      const original = btn.textContent ?? "Checkout";
+      btn.textContent = "Opening Stripe...";
+      try {
+        const res = await authedFetch("/api/v1/checkout/session", {
+          method: "POST",
+          body: JSON.stringify({
+            priceLookupKey: lookupKey,
+            successUrl: `${window.location.origin}/billing?status=success&session={CHECKOUT_SESSION_ID}`,
+            cancelUrl: `${window.location.origin}/billing?status=cancel`,
+          }),
+        });
+        const payload = await res.json();
+        if (!res.ok || !payload.ok || !payload.url) throw new Error(payload.error ?? res.statusText);
+        window.location.href = payload.url;
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = original;
+        alert(`Checkout failed: ${(err as Error).message}`);
+      }
+    });
+  }
+
+  const form = document.getElementById("keyForm") as HTMLFormElement | null;
+  const nameInput = document.getElementById("keyName") as HTMLInputElement | null;
+  const reveal = document.getElementById("newKeyReveal");
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = nameInput?.value.trim() || "default";
+    try {
+      const res = await authedFetch("/api/v1/keys", { method: "POST", body: JSON.stringify({ name }) });
+      const payload = await res.json();
+      if (!res.ok || !payload.ok) throw new Error(payload.error ?? res.statusText);
+      if (nameInput) nameInput.value = "";
+      await renderBilling();
+      const refreshedReveal = document.getElementById("newKeyReveal");
+      if (refreshedReveal) {
+        refreshedReveal.innerHTML = `
+          <div class="key-secret">
+            <p class="card-label">New API key</p>
+            <code>${escapeHtml(payload.secret)}</code>
+            <p class="card-hint">${escapeHtml(payload.warning ?? "Save this key. It will not be shown again.")}</p>
+          </div>
+        `;
+      }
+    } catch (err) {
+      alert(`Key creation failed: ${(err as Error).message}`);
+    }
+  });
+
+  for (const btn of Array.from(document.querySelectorAll<HTMLButtonElement>(".revoke-key"))) {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.keyId;
+      if (!id) return;
+      btn.disabled = true;
+      try {
+        await authedFetch(`/api/v1/keys/${encodeURIComponent(id)}/revoke`, { method: "POST" });
+        await renderBilling();
+      } catch (err) {
+        btn.disabled = false;
+        alert(`Revoke failed: ${(err as Error).message}`);
+      }
+    });
   }
 }
 

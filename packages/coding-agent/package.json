@@ -1,10 +1,14 @@
 {
-  "name": "@kpanks/coding-agent",
-  "version": "0.1.0",
+  "name": "@mnemopay/coding-agent",
+  "version": "0.2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "description": "Praetor coding agent: file/git/test tools + native unified-diff applier + drift-tolerant apply_edit. Repo-rooted, free-tier compatible.",
+  "description": "Coding agent for the MnemoPay toolkit: file/git/test tools + native unified-diff applier + drift-tolerant apply_edit. Repo-rooted, free-tier compatible. Authoring-time companion for @mnemopay/sdk + @blackpig/forge.",
+  "keywords": ["mnemopay", "ai", "coding-agent", "diff", "patch", "agent"],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run",

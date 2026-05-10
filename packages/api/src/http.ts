@@ -449,7 +449,12 @@ export class PraetorApp extends PraetorRouter {
         res.end(JSON.stringify({ ok: false, error: "Not Found" }));
       }
     } catch (err) {
-      const status = (err as { statusCode?: number })?.statusCode ?? 500;
+      let status = (err as { statusCode?: number })?.statusCode ?? 500;
+      // Normalize JSON parse errors → 400 (client problem, not server bug).
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (status === 500 && /JSON|Unexpected token|Expected property/.test(errMsg)) {
+        status = 400;
+      }
       if (!res.writableEnded) {
         res.statusCode = status;
         res.setHeader("content-type", "application/json; charset=utf-8");
@@ -458,10 +463,16 @@ export class PraetorApp extends PraetorRouter {
       }
       // Only log unexpected (5xx) errors; 4xx is normal client traffic.
       if (status >= 500) {
+        let dump: string;
+        if (err instanceof Error) dump = err.message;
+        else { try { dump = JSON.stringify(err); } catch { dump = String(err); } }
         log.error("[praetor-http] unhandled request error", {
           status,
-          error: err instanceof Error ? err.message : String(err),
+          path: pathname,
+          method: req.method,
+          error: dump,
           stack: err instanceof Error ? err.stack : undefined,
+          errKeys: err && typeof err === "object" ? Object.keys(err as object) : undefined,
         });
       }
     }

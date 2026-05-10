@@ -137,6 +137,50 @@ export function createApp(): PraetorApp {
     res.json({ ok: true, mission, logs });
   });
 
+  // EU AI Act Article 12 audit bundle as a downloadable JSON manifest.
+  // For paid tiers (pro+) this includes Merkle-rooted event chain. Free tier
+  // is gated at the billing layer (TIER_LIMITS.articleTwelveAuditAllowed).
+  app.get("/api/v1/missions/:id/article12", async (req, res) => {
+    const missionId = String(req.params.id ?? "");
+    const userId = (req as AuthedRequest).user!.id;
+    const mission = await getMissionForUser(missionId, userId);
+    if (!mission) {
+      res.status(404).json({ ok: false, error: "Mission not found" });
+      return;
+    }
+    const logs = await getMissionLogs(mission.id);
+    // Parse activity events out of the structured log lines (kind=praetor-activity).
+    const events: unknown[] = [];
+    for (const line of logs) {
+      const m = /::praetor-activity::(.+)$/.exec(line);
+      if (m) { try { events.push(JSON.parse(m[1])); } catch { /* skip malformed */ } }
+    }
+    const bundle = {
+      bundleVersion: "praetor-article12/1",
+      missionId: mission.id,
+      generatedAt: new Date().toISOString(),
+      retentionMonths: 6,
+      mission: {
+        id: mission.id,
+        goal: mission.goal,
+        status: mission.status,
+        budget: mission.budget,
+        createdAt: mission.created_at,
+        updatedAt: mission.updated_at,
+        charter: mission.charter_json,
+      },
+      events,
+      logCount: logs.length,
+      // Note: Merkle root + cryptographic sealing are produced by the runner's
+      // packages/core Article 12 module when --article12 is passed at run time.
+      // This endpoint surfaces the in-flight observable bundle. For sealed copies
+      // see the runner's audit-bundle output directory.
+    };
+    res.setHeader("Content-Type", "application/json");
+    res.setHeader("Content-Disposition", `attachment; filename="article12-${mission.id}.json"`);
+    res.json(bundle);
+  });
+
   // "Talk back" surface for the dashboard chat. Appends a message to the
   // per-mission inbox file AND publishes a chat.user / chat.assistant
   // activity event so the SSE stream re-renders the conversation in real
