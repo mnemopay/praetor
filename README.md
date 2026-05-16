@@ -4,6 +4,8 @@
   <p>Charter-driven · Fiscally gated · Audit-logged · Native-first</p>
 </div>
 
+> Praetor's governance primitives — Charter, FiscalGate, Article 12 audit bundle, MerkleAudit chain — now ship inside [`@mnemopay/sdk`](https://www.npmjs.com/package/@mnemopay/sdk) as the unified MnemoPay platform. This repo remains the reference runtime for self-hosted deployments.
+
 ```bash
 npm install -g @kpanks/cli
 PRAETOR_DEV_MODE=1 ANTHROPIC_API_KEY=sk-ant-... praetor serve
@@ -19,30 +21,30 @@ Built for the buyer who needs to answer "how does the agent know what it's allow
 
 The runtime is 25 packages, **489 tests passing across 41 test files**.
 
-| Capability | Package | Status |
-|---|---|---|
-| Multi-LLM routing with prompt caching + Batch API | `@kpanks/router` | Production |
-| Charter schema, mission lifecycle, Merkle audit, Article 12 bundle | `@kpanks/core` | Production |
-| HTTP api server (PraetorHTTP, no Express) + dashboard SSE | `@kpanks/api` | Production |
-| Web dashboard with chat-back UX | `@kpanks/dashboard` | Production |
-| Coding agent — 16 tools incl. `apply_edit`, `repo_map`, `find_symbol`, `load_conventions`, `git_*`, `run_tests` | `@kpanks/coding-agent` | Production |
-| DOM-first browser automation (lazy `playwright-core`, Stagehand-shaped a11y outline) | `@kpanks/browser` | Production |
-| Sandbox factory — Mock / Local / **Docker (hardened)** / Firecracker stub | `@kpanks/sandbox` | Production |
-| Native voice / TTS — Kokoro 82M default + Azure Speech, license-family enforceable | `@kpanks/voice` | Production |
-| Screen capture — native PowerShell / `screencapture` / grim | `@kpanks/vision` | Production |
-| Computer-use session — audit + activity-bus streaming | `@kpanks/computer-control` | Production |
-| Scrape — native fetch + SSRF guard + JSON-LD + sitemap + X.com syndication | `@kpanks/scrape` | Production |
-| Payments — MnemoPay HoldId / Settle / Release pattern | `@kpanks/payments` | Production |
-| MCP server + client (allow/deny tools, oversize guards) | `@kpanks/mcp` | Production |
-| Knowledge base — vector + chunking | `@kpanks/knowledge` | Production |
-| SEO / GEO emit — sitemap, robots, ai.txt, llms.txt, JSON-LD | `@kpanks/seo` | Production |
-| Design pack — PraetorScene → 9 native render targets incl. Remotion, Hyperframes, Three.js, **claude-skill bundle** | `@kpanks/design` | Production |
-| UGC video pipeline — portrait → motion (Sora 2 / Luma / Hedra / Seedance) → voice → ffmpeg | `@kpanks/ugc` | Production |
-| 3D world gen — TRELLIS / Hunyuan / Tripo / fal-sam / HY-World / Marble routing | `@kpanks/world-gen` | Production |
-| Web-native game engine — single-file HTML 2D + Three.js 3D + AABB physics + camera-follow | `@kpanks/game` | Production |
-| Godot 4.4 scaffolder | `@kpanks/game-assets` | Production |
-| Praetor Desktop (Electron wrapper) | `@kpanks/desktop` | Scaffold |
-| Browser-in-Docker | `@kpanks/browser/sandboxed` | Scaffold |
+| Capability | Package |
+|---|---|
+| Multi-LLM routing with prompt caching + Batch API | `@kpanks/router` |
+| Charter schema, mission lifecycle, Merkle audit, Article 12 bundle | `@kpanks/core` |
+| HTTP api server (PraetorHTTP, no Express) + dashboard SSE | `@kpanks/api` |
+| Web dashboard with chat-back UX | `@kpanks/dashboard` |
+| Coding agent — 16 tools incl. `apply_edit`, `repo_map`, `find_symbol`, `load_conventions`, `git_*`, `run_tests` | `@kpanks/coding-agent` |
+| DOM-first browser automation (lazy `playwright-core`, Stagehand-shaped a11y outline) | `@kpanks/browser` |
+| Sandbox factory — Mock / Local / **Docker (hardened)** / Firecracker stub | `@kpanks/sandbox` |
+| Native voice / TTS — Kokoro 82M default + Azure Speech, license-family enforceable | `@kpanks/voice` |
+| Screen capture — native PowerShell / `screencapture` / grim | `@kpanks/vision` |
+| Computer-use session — audit + activity-bus streaming | `@kpanks/computer-control` |
+| Scrape — native fetch + SSRF guard + JSON-LD + sitemap + X.com syndication | `@kpanks/scrape` |
+| Payments — MnemoPay HoldId / Settle / Release pattern | `@kpanks/payments` |
+| MCP server + client (allow/deny tools, oversize guards) | `@kpanks/mcp` |
+| Knowledge base — vector + chunking | `@kpanks/knowledge` |
+| SEO / GEO emit — sitemap, robots, ai.txt, llms.txt, JSON-LD | `@kpanks/seo` |
+| Design pack — PraetorScene → 9 native render targets incl. Remotion, Hyperframes, Three.js, **claude-skill bundle** | `@kpanks/design` |
+| UGC video pipeline — portrait → motion (Sora 2 / Luma / Hedra / Seedance) → voice → ffmpeg | `@kpanks/ugc` |
+| 3D world gen — TRELLIS / Hunyuan / Tripo / fal-sam / HY-World / Marble routing | `@kpanks/world-gen` |
+| Web-native game engine — single-file HTML 2D + Three.js 3D + AABB physics + camera-follow | `@kpanks/game` |
+| Godot 4.4 scaffolder | `@kpanks/game-assets` |
+| Praetor Desktop (Electron wrapper) | `@kpanks/desktop` |
+| Browser-in-Docker | `@kpanks/browser/sandboxed` |
 
 ---
 
@@ -159,22 +161,9 @@ The runtime will:
 
 ## Where Praetor sits
 
-Honest comparison against products in similar lanes:
+Praetor is the runtime layer — charter schema, mission lifecycle, FiscalGate budget enforcement, Article 12 audit bundle, native browser + sandbox + cache. It's the layer regulated enterprises sit on when they need governance + audit + cost caps from day one, and it's the layer solo and small-team builders sit on when they want a runtime + tools + payment + sandbox done for them, not stitched from eight npm packages.
 
-| Lane | Examples | Praetor's position |
-|---|---|---|
-| **AI-coding IDEs** | Cursor, Claude Code, Codex CLI | Different layer — Praetor is a runtime an IDE could be built on, not an IDE itself |
-| **Autonomous coding agents** | Devin, Replit Agent 3 | Praetor's mission shape is right; Devin still wins for "leave it for 4 hours, come back to a PR" polish |
-| **Cloud browser agents** | OpenAI Operator / Atlas | Praetor's browser is DOM-first → more reliable, but local; Operator wins for zero-install hosted |
-| **DOM-first browser stacks** | Browser Use, Stagehand, Browserbase | Praetor competes here — less mature, but composable with the rest of the stack |
-| **Agent SDKs / orchestration** | CrewAI, LangGraph, OpenAI Agents SDK, Microsoft Agent Framework v1.0 | Closest to MS Agent Framework — both ship governance + tools + agent SDK as one. Praetor more opinionated on security. |
-| **Sandbox-as-a-service** | e2b, Modal, Daytona, Sprites | Praetor wraps Docker locally; could add e2b as an opt-in adapter |
-| **Agent memory** | Mem0, Letta, Zep | Praetor consumes MnemoPay for memory; doesn't compete directly |
-| **Vibe coders** | Lovable, Bolt, v0 | Different lane, different audience |
-
-**Strong fit:** regulated enterprises that need governance + audit + cost caps from day one. Solo / small-team builders who want a runtime + tools + payment + sandbox done for them, not stitched from 8 npm packages.
-
-**Bad fit:** vibe-coded MVPs (use Lovable). IDE-centric coders (use Cursor). Anyone who needs cloud-hosted agents *today* (Devin / Replit ship hosted; Praetor's `praetor-api.fly.dev` deploy is forthcoming).
+It plays well with the rest of the agent ecosystem — Cursor / Claude Code / Codex CLI as the IDE surface, Devin / Replit for hosted long-running runs, Browser Use / Stagehand / Browserbase as alternate browser substrates, e2b / Modal / Daytona / Sprites as remote sandbox backends, Mem0 / Letta / Zep as alternate memory backends. Praetor consumes MnemoPay for trust + payments + memory.
 
 ---
 
